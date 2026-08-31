@@ -1,0 +1,383 @@
+---
+/**
+ * Admin page — hidden behind ADMIN_TOKEN.
+ * URL: /admin?token=TON_TOKEN
+ *
+ * Two actions:
+ *   1. Send shipping notification email manually
+ *   2. Create a SendCloud shipment + auto-send email
+ */
+import 'dotenv/config';
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const token = Astro.url.searchParams.get('token');
+const adminToken = process.env.ADMIN_TOKEN || '';
+
+if (!token || token !== adminToken) {
+  return Astro.redirect('/404');
+}
+
+let message: { type: 'success' | 'error'; text: string } | null = null;
+let shipmentData: { trackingNumber: string; carrier: string } | null = null;
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const action = form.get('action') as string;
+
+  if (action === 'email') {
+    // === Send shipping notification email only ===
+    const customerEmail = form.get('email') as string;
+    const customerName = form.get('name') as string;
+    const trackingNumber = form.get('tracking') as string;
+    const carrier = (form.get('carrier') as string) || 'Colissimo';
+    const trackingUrl = (form.get('trackingUrl') as string) || undefined;
+    const quantity = parseInt(form.get('quantity') as string, 10) || 1;
+    const orderId = (form.get('orderId') as string) || undefined;
+
+    if (!customerEmail || !customerName || !trackingNumber) {
+      message = { type: 'error', text: '❌ Email, nom et numéro de suivi sont requis.' };
+    } else {
+      try {
+        const { sendShippingNotification } = await import('../lib/email.ts');
+        await sendShippingNotification({
+          customerEmail, customerName, trackingNumber, carrier, trackingUrl, quantity, orderId,
+        });
+        message = { type: 'success', text: `✅ Email envoyé à ${customerEmail} avec le suivi ${trackingNumber}` };
+      } catch (err: any) {
+        message = { type: 'error', text: `❌ Erreur : ${err.message}` };
+      }
+    }
+  } else if (action === 'shipment') {
+    // === Create SendCloud shipment + auto-send email ===
+    const firstName = form.get('firstName') as string;
+    const lastName = form.get('lastName') as string;
+    const customerName = `${firstName} ${lastName}`.trim();
+    const customerEmail = form.get('email') as string;
+    const phone = form.get('phone') as string;
+    const street = form.get('street') as string;
+    const houseNumber = form.get('houseNumber') as string;
+    const city = form.get('city') as string;
+    const postalCode = form.get('postalCode') as string;
+    const country = (form.get('country') as string) || 'FR';
+    const carrier = (form.get('carrier') as string) || 'Mondial Relay';
+    const quantity = parseInt(form.get('quantity') as string, 10) || 1;
+    const orderId = (form.get('orderId') as string) || undefined;
+
+    if (!customerEmail || !firstName || !street || !houseNumber || !city || !postalCode) {
+      message = { type: 'error', text: '❌ Tous les champs obligatoires doivent être remplis.' };
+    } else {
+      try {
+        const { createShipment } = await import('../lib/sendcloud.ts');
+
+        const result = await createShipment(
+          {
+            name: `${firstName} ${lastName || firstName}`.trim(),
+            company_name: undefined,
+            address_line_1: street,
+            house_number: houseNumber,
+            postal_code: postalCode,
+            city,
+            country_code: country,
+            email: customerEmail,
+            phone_number: phone || undefined,
+          },
+          carrier,
+          [
+            {
+              weight: { value: Math.max(0.1, quantity * 0.07).toFixed(3), unit: 'kg' },
+              dimensions: { length: '28', width: '20', height: '10', unit: 'cm' },
+              description: `Balles de jonglage × ${quantity}`,
+            },
+          ],
+          orderId || undefined,
+        );
+
+        const trackingNumber = result.data.parcels?.[0]?.tracking_number || '';
+        const trackingUrl = result.data.parcels?.[0]?.tracking_url || '';
+        const carrierName = result.data.carrier?.name || carrier;
+
+        // Auto-send the email
+        const { sendShippingNotification } = await import('../lib/email.ts');
+        await sendShippingNotification({
+          customerEmail, customerName, trackingNumber, carrier: carrierName, trackingUrl, quantity, orderId,
+        });
+
+        // Save order in our records
+        const { saveOrder } = await import('../lib/orders.ts');
+        await saveOrder({
+          stripeSessionId: orderId || `manual_${Date.now()}`,
+          customerEmail, customerName, quantity,
+          total: quantity * 5 + 0.5, // balls + shipping (0.50€)
+          shippingAddress: `${houseNumber} ${street}`,
+          city, postalCode, country,
+          carrier: carrierName,
+          trackingNumber,
+          status: 'shipped',
+          createdAt: new Date().toISOString(),
+        });
+
+        message = {
+          type: 'success',
+          text: `✅ Expédition créée + email envoyé à ${customerEmail} — Suivi : ${trackingNumber}`,
+        };
+        shipmentData = { trackingNumber, carrier: carrierName };
+      } catch (err: any) {
+        message = { type: 'error', text: `❌ Erreur SendCloud : ${err.message}` };
+      }
+    }
+  }
+}
+---
+
+<BaseLayout lang="fr" page="admin" title="Admin — db's Juggling">
+  <div class="py-24">
+    <div class="mx-auto max-w-lg px-6">
+
+      <div class="mb-14 text-center anim-fade-up">
+        <span class="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-dbs-purple">ADMIN</span>
+        <h1 class="text-3xl font-bold tracking-tight text-dbs-dark sm:text-4xl dark:text-white">
+          Gestion des expéditions
+        </h1>
+      </div>
+
+      {
+        message && (
+          <div class={`mb-8 rounded-xl px-5 py-3 text-sm font-medium ${
+            message.type === 'success'
+              ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+              : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+          }`}>
+            {message.text}
+            {shipmentData && (
+              <p class="mt-2 font-mono text-xs">{shipmentData.trackingNumber} — {shipmentData.carrier}</p>
+            )}
+          </div>
+        )
+      }
+
+      <!-- Tabs -->
+      <div class="mb-8 flex gap-2 border-b border-black/[0.06] pb-0 dark:border-white/[0.06]">
+        <button id="tab-create" class="tab-btn active px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-purple border-b-2 border-dbs-purple" onclick="switchTab('create')">Créer expédition</button>
+        <button id="tab-email" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('email')">Email suivi manuel</button>
+      </div>
+
+      <!-- Tab: Create shipment -->
+      <div id="panel-create" class="space-y-5 anim-fade-up">
+
+        <p class="mb-6 text-sm text-dbs-dark/50 dark:text-white/30">
+          Crée une expédition SendCloud (Mondial Relay, Colissimo…) et envoie automatiquement l'email de suivi au client.
+        </p>
+
+        <form method="POST" class="space-y-5">
+          <input type="hidden" name="action" value="shipment" />
+
+          <!-- Nom -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="firstName" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Prénom *</label>
+              <input type="text" id="firstName" name="firstName" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+            <div>
+              <label for="lastName" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Nom</label>
+              <input type="text" id="lastName" name="lastName"
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+          </div>
+
+          <!-- Email + Phone -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="email" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Email *</label>
+              <input type="email" id="email" name="email" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90"
+                placeholder="client@example.com" />
+            </div>
+            <div>
+              <label for="phone" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Téléphone</label>
+              <input type="tel" id="phone" name="phone"
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90"
+                placeholder="06 12 34 56 78" />
+            </div>
+          </div>
+
+          <!-- Adresse -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label for="street" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Rue *</label>
+              <input type="text" id="street" name="street" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90"
+                placeholder="Rue de la Paix" />
+            </div>
+            <div>
+              <label for="houseNumber" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">N° *</label>
+              <input type="text" id="houseNumber" name="houseNumber" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90"
+                placeholder="42" />
+            </div>
+          </div>
+
+          <!-- Ville + CP + Pays -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="col-span-2">
+              <label for="city" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Ville *</label>
+              <input type="text" id="city" name="city" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+            <div>
+              <label for="postalCode" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">CP *</label>
+              <input type="text" id="postalCode" name="postalCode" required
+                class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90"
+                placeholder="33420" />
+            </div>
+          </div>
+
+          <!-- Pays -->
+          <div>
+            <label for="country" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Pays</label>
+            <select id="country" name="country"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90">
+              <option value="FR">France</option>
+              <option value="BE">Belgique</option>
+              <option value="CH">Suisse</option>
+              <option value="LU">Luxembourg</option>
+              <option value="DE">Allemagne</option>
+              <option value="IT">Italie</option>
+              <option value="ES">Espagne</option>
+            </select>
+          </div>
+
+          <!-- Transporteur -->
+          <div>
+            <label for="carrier" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Transporteur</label>
+            <select id="carrier" name="carrier"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90">
+              <option value="Mondial Relay">Mondial Relay</option>
+              <option value="Colissimo">Colissimo</option>
+              <option value="Chronopost">Chronopost</option>
+              <option value="DPD">DPD</option>
+              <option value="La Poste">La Poste</option>
+            </select>
+          </div>
+
+          <!-- Quantité -->
+          <div>
+            <label for="quantity" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Quantité</label>
+            <input type="number" id="quantity" name="quantity" min="1" value="1"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+          </div>
+
+          <!-- Réf. commande -->
+          <div>
+            <label for="orderId" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Réf. commande Stripe (optionnel)</label>
+            <input type="text" id="orderId" name="orderId"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15 font-mono text-xs"
+              placeholder="cs_test_..." />
+          </div>
+
+          <button type="submit"
+            class="w-full cursor-pointer rounded-xl bg-dbs-purple px-6 py-4 text-sm font-bold text-white transition hover:bg-dbs-purple/90 focus:outline-none focus:ring-2 focus:ring-dbs-purple/40">
+            🚚 Créer l'expédition + envoyer l'email
+          </button>
+        </form>
+      </div>
+
+      <!-- Tab: Manual email -->
+      <div id="panel-email" class="space-y-5 anim-fade-up" style="display:none;">
+        <p class="mb-6 text-sm text-dbs-dark/50 dark:text-white/30">
+          Envoie un email de suivi avec un numéro de tracking déjà connu.
+        </p>
+
+        <form method="POST" class="space-y-5">
+          <input type="hidden" name="action" value="email" />
+
+          <div>
+            <label for="email2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Email du client *</label>
+            <input type="email" id="email2" name="email" required
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15"
+              placeholder="client@example.com" />
+          </div>
+
+          <div>
+            <label for="name2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Nom du client *</label>
+            <input type="text" id="name2" name="name" required
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15"
+              placeholder="Jean Dupont" />
+          </div>
+
+          <div>
+            <label for="quantity2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Quantité</label>
+            <input type="number" id="quantity2" name="quantity" min="1" value="1"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+          </div>
+
+          <div>
+            <label for="tracking2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Numéro de suivi *</label>
+            <input type="text" id="tracking2" name="tracking" required
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15 font-mono tracking-wider"
+              placeholder="7A99999999999" />
+          </div>
+
+          <div>
+            <label for="carrier2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Transporteur</label>
+            <select id="carrier2" name="carrier"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90">
+              <option value="Colissimo">Colissimo</option>
+              <option value="Mondial Relay">Mondial Relay</option>
+              <option value="Chronopost">Chronopost</option>
+              <option value="La Poste">La Poste</option>
+              <option value="DPD">DPD</option>
+              <option value="Autre">Autre</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="trackingUrl2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Lien de suivi (optionnel)</label>
+            <input type="url" id="trackingUrl2" name="trackingUrl"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15"
+              placeholder="https://www.laposte.fr/suivi" />
+          </div>
+
+          <div>
+            <label for="orderId2" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Réf. commande Stripe (optionnel)</label>
+            <input type="text" id="orderId2" name="orderId"
+              class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15 font-mono text-xs"
+              placeholder="cs_test_..." />
+          </div>
+
+          <button type="submit"
+            class="w-full cursor-pointer rounded-xl bg-dbs-purple px-6 py-4 text-sm font-bold text-white transition hover:bg-dbs-purple/90 focus:outline-none focus:ring-2 focus:ring-dbs-purple/40">
+            📦 Envoyer l'email de suivi
+          </button>
+        </form>
+      </div>
+
+      <div class="mt-6 text-center">
+        <a href="/" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">← Retour au site</a>
+      </div>
+
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active', 'text-dbs-purple', 'border-dbs-purple');
+    b.classList.add('text-dbs-dark/40', 'border-transparent', 'dark:text-white/30');
+  });
+  document.getElementById('tab-' + name).classList.add('active', 'text-dbs-purple', 'border-dbs-purple');
+  document.getElementById('tab-' + name).classList.remove('text-dbs-dark/40', 'border-transparent', 'dark:text-white/30');
+
+  document.getElementById('panel-create').style.display = name === 'create' ? '' : 'none';
+  document.getElementById('panel-email').style.display = name === 'email' ? '' : 'none';
+}
+</script>
+
+<style>
+  .anim-fade-up { animation: fadeUp 0.5s ease-out both; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>

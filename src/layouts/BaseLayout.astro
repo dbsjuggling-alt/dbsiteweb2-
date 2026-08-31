@@ -1,0 +1,244 @@
+---
+import { type Locale, translate, locales, defaultLocale } from '../i18n/translations';
+
+interface Props {
+  title?: string;
+  description?: string;
+  page?: string;
+  lang?: Locale;
+}
+
+const {
+  title = "db's — Professional Juggling Balls",
+  description = 'Premium juggling balls designed for enthusiasts and performers.',
+  page = '',
+  lang = defaultLocale,
+} = Astro.props;
+
+const otherLang: Locale = lang === 'fr' ? 'en' : 'fr';
+
+const enUrl = lang === 'fr'
+  ? Astro.url.pathname.replace('/fr/', '/').replace(/^\/fr$/, '/')
+  : Astro.url.pathname;
+const frUrl = lang === 'en'
+  ? '/fr' + (Astro.url.pathname === '/' ? '' : Astro.url.pathname)
+  : Astro.url.pathname;
+const langSwitchUrl = lang === 'fr' ? enUrl : frUrl;
+
+const socialIcons = [
+  { name: 'facebook', href: 'https://facebook.com/dbsjuggling', icon: 'M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z' },
+  { name: 'instagram', href: 'https://instagram.com/dbsjuggling', icon: 'M7.8 2h8.4C19.4 2 22 4.6 22 7.8v8.4a5.8 5.8 0 0 1-5.8 5.8H7.8C4.6 22 2 19.4 2 16.2V7.8A5.8 5.8 0 0 1 7.8 2m-.2 2A3.6 3.6 0 0 0 4 7.6v8.8C4 18.39 5.61 20 7.6 20h8.8a3.6 3.6 0 0 0 3.6-3.6V7.6C20 5.61 18.39 4 16.4 4H7.6m9.65 1.5a1.25 1.25 0 0 1 1.25 1.25A1.25 1.25 0 0 1 17.25 8 1.25 1.25 0 0 1 16 6.75a1.25 1.25 0 0 1 1.25-1.25M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3z' },
+  { name: 'linkedin', href: 'https://linkedin.com/company/dbsjuggling', icon: 'M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z' },
+  { name: 'twitter', href: 'https://twitter.com/dbsjuggling', icon: 'M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z' },
+];
+
+const navLinks: { key: 'nav.home' | 'nav.products' | 'nav.store' | 'nav.contact'; href: string }[] = [
+  { key: 'nav.home', href: lang === defaultLocale ? '/' : '/fr/' },
+  { key: 'nav.products', href: `${lang === defaultLocale ? '' : '/' + lang}/products` },
+  { key: 'nav.store', href: `${lang === defaultLocale ? '' : '/' + lang}/store` },
+  { key: 'nav.contact', href: `${lang === defaultLocale ? '' : '/' + lang}/contact` },
+];
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    {lang === 'fr' && <link rel="alternate" href={enUrl} hrefLang="en" />}
+    {lang === 'en' && <link rel="alternate" href={frUrl} hrefLang="fr" />}
+    <style is:global>
+      /* ── Minimalist Animation System ── */
+      .anim-fade-up {
+        opacity: 0;
+        transform: translateY(32px);
+        transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .anim-fade-up.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .anim-fade-in {
+        opacity: 0;
+        transition: opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .anim-fade-in.visible { opacity: 1; }
+
+      .anim-scale {
+        opacity: 0;
+        transform: scale(0.94);
+        transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .anim-scale.visible {
+        opacity: 1;
+        transform: scale(1);
+      }
+
+      /* Staggered grid children */
+      .anim-stagger > .anim-item:nth-child(1) { transition-delay: 0ms; }
+      .anim-stagger > .anim-item:nth-child(2) { transition-delay: 80ms; }
+      .anim-stagger > .anim-item:nth-child(3) { transition-delay: 160ms; }
+      .anim-stagger > .anim-item:nth-child(4) { transition-delay: 240ms; }
+      .anim-stagger > .anim-item:nth-child(5) { transition-delay: 320ms; }
+      .anim-stagger > .anim-item:nth-child(6) { transition-delay: 400ms; }
+
+      /* ── Hover Effects ── */
+      .hover-lift {
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .hover-lift:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.06);
+      }
+
+      .hover-btn {
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      .hover-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(103,61,230,0.25);
+      }
+      .dark .hover-btn:hover {
+        box-shadow: 0 6px 20px rgba(103,61,230,0.4);
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-white font-sans text-dbs-dark antialiased dark:bg-[#0d0d0f] dark:text-white/90">
+    <!-- Dark mode init — runs before paint -->
+    <script is:inline>
+      (function() {
+        const s = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (s === 'dark' || (!s && prefersDark)) document.documentElement.classList.add('dark');
+      })();
+    </script>
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-black/[0.06] bg-white/90 backdrop-blur-lg dark:border-white/[0.06] dark:bg-[#0d0d0f]/90">
+      <div class="mx-auto flex h-16 max-w-[1224px] items-center px-6">
+        <a href={lang === defaultLocale ? '/' : '/fr/'} class="flex items-center gap-2 no-underline">
+          <span class="inline-flex items-center justify-center rounded-lg border border-black/[0.08] px-3.5 py-1.5 text-sm font-bold uppercase tracking-[0.15em] text-dbs-dark transition hover:border-dbs-purple/30 dark:border-white/[0.08] dark:text-white/90">
+            db's
+          </span>
+        </a>
+
+        <nav class="ml-auto flex items-center gap-8 text-sm font-medium tracking-wide">
+          {navLinks.map((link) => (
+            <a
+              href={link.href}
+              class={`relative py-1 transition-colors no-underline dark:text-white/50 dark:hover:text-white ${
+                page === link.key.replace('nav.', '') 
+                  ? 'text-dbs-purple after:absolute after:bottom-0 after:left-0 after:h-[2px] after:w-full after:rounded-full after:bg-dbs-purple dark:text-dbs-purple' 
+                  : 'text-dbs-dark/70 hover:text-dbs-dark'
+              }`}
+            >
+              {translate(lang, link.key)}
+            </a>
+          ))}
+        </nav>
+
+        <div class="ml-8 flex items-center gap-5">
+          <a
+            href={langSwitchUrl}
+            class="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-widest text-dbs-dark/40 no-underline transition hover:text-dbs-dark dark:text-white/30 dark:hover:text-white"
+          >
+            <span>{lang === 'fr' ? 'EN' : 'FR'}</span>
+            <span class="text-dbs-dark/15 dark:text-white/10">/</span>
+            <span class="font-bold text-dbs-dark dark:text-white/90">{lang.toUpperCase()}</span>
+          </a>
+
+          <span class="h-4 w-px bg-black/[0.06] dark:bg-white/[0.06]"></span>
+
+          {socialIcons.map((s) => (
+            <a
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-dbs-dark/40 transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple"
+              aria-label={`Go to ${s.name} page`}
+            >
+              <svg class="size-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d={s.icon} />
+              </svg>
+            </a>
+          ))}
+          <button class="toggle-theme ml-1 text-dbs-dark/40 transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple" aria-label="Toggle dark mode">
+            <svg class="size-4 block dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+            <svg class="size-4 hidden dark:block" viewBox="0 0 24 24" fill="currentColor"><path d="M21.53 15.93c-.16-.27-.61-.69-1.73-.49a8.46 8.46 0 01-3.88.13 8.409 8.409 0 01-5.91-5.82 8.462 8.462 0 01.64-5.32c.28-.64.09-1.17-.17-1.46-.25-.27-.68-.48-1.26-.28a9.978 9.978 0 00-6.74 7.62A10.005 10.005 0 0012 22c4.86 0 9.05-3.49 9.84-2.88.26.2.37.54.22.81-.17.3-.49.46-.79.38-.89-.24-1.17.15-1.34.43a.62.62 0 00.18.79c.2.14.48.18.8.11.43-.09.92.02 1.13.24.25.26.29.64.13 1.01-.15.37-.47.6-.86.63-.44.03-.91-.14-1.22-.39-.29-.23-.45-.5-.64-.3Z"/></svg>
+          </button>
+          <button class="text-dbs-dark/40 transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple" aria-label={translate(lang, 'header.cart')}>
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-black/[0.06] py-12 dark:border-white/[0.06]">
+      <div class="mx-auto max-w-[1224px] px-6 text-center">
+        <div class="mb-6 flex items-center justify-center gap-5">
+          {socialIcons.map((s) => (
+            <a
+              href={s.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-dbs-dark/25 transition hover:text-dbs-purple dark:text-white/20 dark:hover:text-dbs-purple"
+              aria-label={`Go to ${s.name} page`}
+            >
+              <svg class="size-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d={s.icon} />
+              </svg>
+            </a>
+          ))}
+        </div>
+        <p class="text-xs text-dbs-dark/30 tracking-wide dark:text-white/20">{translate(lang, 'footer.copyright').replace('{year}', String(new Date().getFullYear()))}</p>
+      </div>
+    </footer>
+
+    <!-- Scroll-triggered animations -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { threshold: 0.12, rootMargin: '0px 0px -30px 0px' }
+        );
+
+        document.querySelectorAll('.anim-fade-up, .anim-fade-in, .anim-scale').forEach((el) => {
+          observer.observe(el);
+        });
+
+        // Dark mode toggle
+        document.querySelectorAll('.toggle-theme').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const html = document.documentElement;
+            html.classList.toggle('dark');
+            localStorage.setItem('theme', html.classList.contains('dark') ? 'dark' : 'light');
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

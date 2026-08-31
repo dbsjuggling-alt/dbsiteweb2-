@@ -1,0 +1,39 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { translate, defaultLocale } from '../i18n/translations';
+const lang = defaultLocale;
+---
+
+<BaseLayout lang={lang} page="contact" title={"Contact | db's"}>
+  <div class="py-24">
+    <div class="mx-auto max-w-lg px-6">
+      <div class="mb-14 text-center anim-fade-up">
+        <span class="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-dbs-purple">{translate(lang, 'contact.heading')}</span>
+        <h1 class="mt-2 text-3xl font-bold tracking-tight text-dbs-dark sm:text-4xl dark:text-white">{translate(lang, 'contact.subtitle')}</h1>
+      </div>
+
+      <form action="https://formspree.io/f/your-form-id" method="POST" class="space-y-5 anim-fade-up" style="transition-delay: 100ms;">
+        <div>
+          <label for="name" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">{translate(lang, 'contact.name')}</label>
+          <input type="text" id="name" name="name" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none focus:ring-2 focus:ring-dbs-purple/[0.08] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15" placeholder={translate(lang, 'contact.name')} />
+        </div>
+        <div>
+          <label for="email" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">{translate(lang, 'contact.email')}</label>
+          <input type="email" id="email" name="email" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none focus:ring-2 focus:ring-dbs-purple/[0.08] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15" placeholder={translate(lang, 'contact.email')} />
+        </div>
+        <div>
+          <label for="message" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">{translate(lang, 'contact.message')}</label>
+          <textarea id="message" name="message" required rows="5" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none focus:ring-2 focus:ring-dbs-purple/[0.08] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15" placeholder={translate(lang, 'contact.message')}></textarea>
+        </div>
+        <button type="submit" class="hover-btn w-full rounded-xl bg-dbs-dark py-3.5 text-sm font-semibold text-white dark:bg-white dark:text-[#0d0d0f] dark:hover:bg-white/90">
+          {translate(lang, 'contact.submit')}
+        </button>
+      </form>
+
+      <div class="mt-10 text-center anim-fade-up" style="transition-delay: 200ms;">
+        <p class="text-xs text-dbs-dark/25 dark:text-white/20">{translate(lang, 'contact.or')}</p>
+        <p class="mt-1.5 text-base font-semibold tracking-wide text-dbs-dark dark:text-white/80">{translate(lang, 'contact.emailLabel')}</p>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

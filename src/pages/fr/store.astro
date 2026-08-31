@@ -1,0 +1,206 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { translate } from '../../i18n/translations';
+const lang = 'fr';
+---
+
+<BaseLayout lang={lang} page="store" title={"Boutique | db's"}>
+  <div class="py-24">
+    <div class="mx-auto max-w-lg px-6">
+      <div class="mb-14 text-center anim-fade-up">
+        <span class="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-dbs-purple">{translate(lang, 'store.heading')}</span>
+        <h1 class="text-3xl font-bold tracking-tight text-dbs-dark sm:text-4xl dark:text-white">{translate(lang, 'store.subtitle')}</h1>
+      </div>
+
+      <div class="anim-scale rounded-2xl border border-black/[0.05] bg-white p-10 text-center dark:border-white/[0.05] dark:bg-white/[0.03]" style="transition-delay: 100ms;">
+        <div class="mx-auto mb-8 h-48 w-48 overflow-hidden rounded-full shadow-lg shadow-black/[0.04] dark:shadow-black/30">
+          <img
+            src="https://cdn.zyrosite.com/cdn-ecommerce/store_01JHTCM0MJFETQMCPFTPG70789%2Fassets%2F1737126210199-balledbs.jpg"
+            alt="Balle de jonglage db's"
+            class="h-full w-full object-cover"
+            width="192"
+            height="192"
+            loading="lazy"
+          />
+        </div>
+
+        <h2 class="text-2xl font-bold text-dbs-dark dark:text-white/90">{translate(lang, 'store.productName')}</h2>
+        <p class="mt-1 text-sm text-dbs-dark/35 dark:text-white/30">{translate(lang, 'store.productDesc')}</p>
+
+        <div class="mt-6 flex items-center justify-center gap-2 text-sm text-dbs-dark/40 dark:text-white/30">
+          <span>{translate(lang, 'store.unitPrice')}</span>
+          <span class="text-lg font-extrabold text-dbs-dark dark:text-white" id="unit-price">&euro;5.00</span>
+        </div>
+
+        <div class="mx-auto mt-6 flex w-fit items-center gap-5 rounded-xl border border-black/[0.06] px-5 py-3 dark:border-white/[0.08]">
+          <button id="qty-minus" class="flex h-9 w-9 items-center justify-center rounded-lg text-lg font-semibold text-dbs-dark/60 transition hover:bg-dbs-purple/[0.06] hover:text-dbs-purple disabled:opacity-20 dark:text-white/50 dark:hover:bg-dbs-purple/[0.12] dark:hover:text-dbs-purple" disabled aria-label="Diminuer la quantité">&minus;</button>
+          <input type="number" id="qty-input" value="1" min="1" max="50" class="w-14 text-center text-xl font-bold text-dbs-dark outline-none dark:bg-transparent dark:text-white [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" aria-label="Quantité" />
+          <button id="qty-plus" class="flex h-9 w-9 items-center justify-center rounded-lg text-lg font-semibold text-dbs-dark/60 transition hover:bg-dbs-purple/[0.06] hover:text-dbs-purple dark:text-white/50 dark:hover:bg-dbs-purple/[0.12] dark:hover:text-dbs-purple" aria-label="Augmenter la quantité">+</button>
+        </div>
+
+        <div class="mt-5 space-y-1">
+          <div>
+            <span class="text-sm text-dbs-dark/40 dark:text-white/30">{translate(lang, 'store.total')} </span>
+            <span class="text-3xl font-extrabold text-dbs-dark dark:text-white" id="total-price">&euro;5.00</span>
+          </div>
+          <!-- Discount info (hidden by default) -->
+          <div id="discount-info" class="hidden">
+            <span class="text-sm line-through text-dbs-dark/30 dark:text-white/20" id="original-price"></span>
+            <span class="ml-2 inline-block rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-400" id="discount-badge"></span>
+            <p class="mt-1 text-xs text-green-600 dark:text-green-400" id="saved-amount"></p>
+          </div>
+        </div>
+
+        <button id="checkout-btn" class="hover-btn mt-6 w-full rounded-xl bg-dbs-dark py-3.5 text-sm font-semibold uppercase tracking-wider text-white disabled:opacity-40 dark:bg-white dark:text-[#0d0d0f]">
+          {translate(lang, 'store.purchase')}
+        </button>
+
+        <p class="mt-4 text-xs text-dbs-dark/25 dark:text-white/20">{translate(lang, 'store.priceHint')}</p>
+      </div>
+
+      <!-- Promo code -->
+      <div class="mt-6 anim-fade-up" style="transition-delay: 150ms;">
+        <label class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">{translate(lang, 'store.promo.label')}</label>
+        <div class="flex items-center gap-2 rounded-xl border border-black/[0.06] bg-white p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
+          <input type="text" id="promo-input"
+            class="w-full rounded-lg px-4 py-3 text-sm text-dbs-dark outline-none placeholder:text-dbs-dark/25 dark:bg-transparent dark:text-white/90 dark:placeholder:text-white/20"
+            placeholder="{translate(lang, 'store.promo.placeholder')}" />
+          <button id="promo-btn"
+            class="shrink-0 rounded-lg bg-dbs-purple/[0.08] px-4 py-3 text-xs font-semibold text-dbs-purple transition hover:bg-dbs-purple/[0.15] dark:bg-dbs-purple/[0.15] dark:text-dbs-purple dark:hover:bg-dbs-purple/[0.25]">
+            {translate(lang, 'store.promo.apply')}
+          </button>
+        </div>
+        <div id="promo-feedback" class="mt-1.5 min-h-[20px] text-xs"></div>
+      </div>
+
+      <div class="mt-6 rounded-2xl border border-black/[0.04] bg-dbs-purple/[0.015] p-6 text-center anim-fade-up dark:border-white/[0.05] dark:bg-dbs-purple/[0.04]">
+        <p class="text-sm font-medium text-dbs-dark/60 dark:text-white/50"><strong class="text-dbs-dark dark:text-white/80">{translate(lang, 'store.shipping.text')}</strong></p>
+        <p class="mt-2 text-xs text-dbs-dark/35 dark:text-white/25">{translate(lang, 'store.shipping.countries')}</p>
+        <p class="mt-1 text-xs text-dbs-dark/35 dark:text-white/25">
+          {translate(lang, 'store.shipping.other')}
+          <a href="/fr/contact" class="font-medium text-dbs-purple underline underline-offset-2 hover:text-dbs-purple-dark">{translate(lang, 'contact.heading')}</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
+
+<script>
+const qtyInput = document.getElementById('qty-input');
+const qtyMinus = document.getElementById('qty-minus');
+const qtyPlus = document.getElementById('qty-plus');
+const totalEl = document.getElementById('total-price');
+const unitEl = document.getElementById('unit-price');
+const checkoutBtn = document.getElementById('checkout-btn');
+const promoInput = document.getElementById('promo-input');
+const promoBtn = document.getElementById('promo-btn');
+const promoFeedback = document.getElementById('promo-feedback');
+const discountInfo = document.getElementById('discount-info');
+const originalPrice = document.getElementById('original-price');
+const discountBadge = document.getElementById('discount-badge');
+const savedAmount = document.getElementById('saved-amount');
+
+let promoApplied = false;
+let currentCode = '';
+
+function getUnitPrice(qty) { return 500; }
+function getTotal(qty) { return getUnitPrice(qty) * qty; }
+function formatEur(cents) { return '\u20AC' + (cents / 100).toFixed(2); }
+
+function updateDisplay() {
+  const qty = parseInt(qtyInput.value, 10) || 1;
+  const clamped = Math.max(1, Math.min(50, qty));
+  qtyInput.value = clamped;
+  unitEl.textContent = formatEur(getUnitPrice(clamped));
+  
+  if (promoApplied && currentCode) {
+    // If a promo is applied, recalculate with quantity change
+    applyPromo(true);
+  } else {
+    totalEl.textContent = formatEur(getTotal(clamped));
+    discountInfo.classList.add('hidden');
+  }
+  qtyMinus.disabled = clamped <= 1;
+}
+
+qtyMinus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) > 1) qtyInput.value--; updateDisplay(); });
+qtyPlus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) < 50) qtyInput.value++; updateDisplay(); });
+qtyInput.addEventListener('change', updateDisplay);
+qtyInput.addEventListener('input', updateDisplay);
+
+checkoutBtn.addEventListener('click', async () => {
+  const qty = parseInt(qtyInput.value, 10) || 1;
+  checkoutBtn.disabled = true;
+  checkoutBtn.textContent = 'Chargement...';
+  try {
+    const body = { quantity: qty, unitAmount: 500 };
+    if (promoApplied && currentCode) body.promoCode = currentCode;
+    const res = await fetch('/api/checkout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else throw new Error(data.error || 'Erreur inconnue');
+  } catch(err) { console.error(err); checkoutBtn.disabled = false; checkoutBtn.textContent = 'Erreur — Réessayer'; }
+});
+
+async function applyPromo(silent) {
+  const code = promoInput.value.trim().toUpperCase();
+  const qty = parseInt(qtyInput.value, 10) || 1;
+  
+  if (!code) {
+    promoFeedback.textContent = '';
+    promoApplied = false;
+    currentCode = '';
+    discountInfo.classList.add('hidden');
+    totalEl.textContent = formatEur(getTotal(qty));
+    return;
+  }
+  
+  if (!silent) {
+    promoBtn.disabled = true;
+    promoBtn.textContent = '...';
+  }
+  
+  try {
+    const res = await fetch('/api/validate-promo', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ promoCode: code, quantity: qty }),
+    });
+    const data = await res.json();
+    
+    if (data.valid) {
+      currentCode = code;
+      promoApplied = true;
+      promoFeedback.textContent = '\u2705 ' + data.label;
+      promoFeedback.className = 'mt-1.5 min-h-[20px] text-xs text-green-600';
+      
+      // Show discount visually
+      totalEl.textContent = formatEur(data.discountedCents);
+      originalPrice.textContent = formatEur(data.originalCents);
+      discountBadge.textContent = data.label;
+      savedAmount.textContent = 'Vous économisez ' + formatEur(data.savedCents);
+      discountInfo.classList.remove('hidden');
+    } else {
+      promoApplied = false;
+      currentCode = '';
+      discountInfo.classList.add('hidden');
+      totalEl.textContent = formatEur(getTotal(qty));
+      promoFeedback.textContent = '\u274C ' + (data.reason || 'Code invalide');
+      promoFeedback.className = 'mt-1.5 min-h-[20px] text-xs text-red-500';
+    }
+  } catch {
+    promoFeedback.textContent = '\u274C Erreur de validation';
+    promoFeedback.className = 'mt-1.5 min-h-[20px] text-xs text-red-500';
+  }
+  
+  if (!silent) {
+    promoBtn.disabled = false;
+    promoBtn.textContent = 'Appliquer';
+    promoInput.focus();
+    promoInput.select();
+  }
+}
+
+promoBtn.addEventListener('click', () => applyPromo(false));
+promoInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyPromo(false); } });
+</script>

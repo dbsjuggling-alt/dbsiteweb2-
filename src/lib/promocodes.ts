@@ -1,9 +1,11 @@
 /**
- * Promo codes — JSON file-based.
+ * Promo codes — seeded in code, persisted to JSON for usage counts.
+ *
+ * Built-in codes (TEST99, WELCOME10) are always available.
+ * Usage counts are persisted when possible but failures are silent
+ * (important for Railway's ephemeral filesystem).
  *
  * File: ~/.hermes/data/dbs-promocodes.json
- *
- * Manage codes via page admin or directly editing the JSON file.
  */
 
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
@@ -15,60 +17,80 @@ const DATA_DIR = join(homedir(), '.hermes', 'data');
 const DATA_FILE = join(DATA_DIR, 'dbs-promocodes.json');
 
 export interface PromoCode {
-  code: string;                    // e.g. "WELCOME10", uppercase
+  code: string;
   discountType: 'percentage' | 'fixed';
-  discountValue: number;           // e.g. 10 for 10% or 100 for 1€
-  minQuantity: number;             // minimum balls for this code (default 1)
-  maxUses: number;                 // max total uses (0 = unlimited)
+  discountValue: number;
+  minQuantity: number;
+  maxUses: number;
   usedCount: number;
-  expiresAt?: string;              // ISO date string, optional
+  expiresAt?: string;
   active: boolean;
-  label: string;                   // displayed to customer, e.g. "-10%"
+  label: string;
 }
+
+// Built-in seed codes — always available, cannot be removed
+const SEED_CODES: PromoCode[] = [
+  {
+    code: 'TEST99',
+    discountType: 'percentage',
+    discountValue: 99,
+    minQuantity: 1,
+    maxUses: 999,
+    usedCount: 0,
+    active: true,
+    label: '-99%',
+  },
+  {
+    code: 'WELCOME10',
+    discountType: 'percentage',
+    discountValue: 10,
+    minQuantity: 1,
+    maxUses: 50,
+    usedCount: 0,
+    active: true,
+    label: '-10%',
+  },
+];
 
 async function ensureDir(): Promise<void> {
   if (!existsSync(DATA_DIR)) {
-    await mkdir(DATA_DIR, { recursive: true });
+    try { await mkdir(DATA_DIR, { recursive: true }); } catch {}
   }
 }
 
 async function readAll(): Promise<PromoCode[]> {
+  // Start with seed codes
+  const merged = new Map<string, PromoCode>();
+  for (const s of SEED_CODES) merged.set(s.code, { ...s });
+
+  // Try to merge with persisted file (usage counts)
   try {
     await ensureDir();
     const raw = await readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const persisted: PromoCode[] = JSON.parse(raw);
+    for (const p of persisted) {
+      // Merge: seed code → keep seed definition but restore usedCount
+      // Custom code → add it
+      if (merged.has(p.code)) {
+        merged.set(p.code, { ...merged.get(p.code)!, usedCount: p.usedCount });
+      } else {
+        merged.set(p.code, p);
+      }
+    }
   } catch {
-    // Seed with a demo code on first access
-    const defaults: PromoCode[] = [
-      {
-        code: 'TEST99',
-        discountType: 'percentage',
-        discountValue: 99,
-        minQuantity: 1,
-        maxUses: 999,
-        usedCount: 0,
-        active: true,
-        label: '-99%',
-      },
-      {
-        code: 'WELCOME10',
-        discountType: 'percentage',
-        discountValue: 10,
-        minQuantity: 1,
-        maxUses: 50,
-        usedCount: 0,
-        active: true,
-        label: '-10%',
-      },
-    ];
-    await writeAll(defaults);
-    return defaults;
+    // First run — seed codes are enough
   }
+
+  return Array.from(merged.values());
 }
 
 async function writeAll(codes: PromoCode[]): Promise<void> {
-  await ensureDir();
-  await writeFile(DATA_FILE, JSON.stringify(codes, null, 2), 'utf-8');
+  try {
+    await ensureDir();
+    await writeFile(DATA_FILE, JSON.stringify(codes, null, 2), 'utf-8');
+  } catch {
+    // Silent — filesystem may not be writable (Railway)
+  }
 }
 
 /** Validate a promo code and return its details (or null if invalid) */
@@ -102,7 +124,7 @@ export async function validateCode(
   return { valid: true, promo };
 }
 
-/** Compute discounted price (in cents). Returns null if invalid */
+/** Compute discounted price (in cents) */
 export function applyDiscount(
   totalCents: number,
   promo: PromoCode,
@@ -111,7 +133,6 @@ export function applyDiscount(
   if (promo.discountType === 'percentage') {
     saved = Math.round(totalCents * promo.discountValue / 100);
   } else {
-    // Fixed discount in cents
     saved = Math.min(totalCents, promo.discountValue);
   }
   return {
@@ -130,7 +151,7 @@ export async function markUsed(code: string): Promise<void> {
   }
 }
 
-/** List all promo codes (for admin) */
+/** List all promo codes */
 export async function listCodes(): Promise<PromoCode[]> {
   return readAll();
 }

@@ -41,6 +41,16 @@ async function readAll(): Promise<PromoCode[]> {
     // Seed with a demo code on first access
     const defaults: PromoCode[] = [
       {
+        code: 'TEST99',
+        discountType: 'percentage',
+        discountValue: 99,
+        minQuantity: 1,
+        maxUses: 999,
+        usedCount: 0,
+        active: true,
+        label: '-99%',
+      },
+      {
         code: 'WELCOME10',
         discountType: 'percentage',
         discountValue: 10,

@@ -6,7 +6,7 @@
  *
  * Config in SendCloud dashboard:
  *   Settings → Webhooks → Add webhook
- *   URL: https://dbsjuggling.com/api/webhook/sendcloud
+ *   URL: https://dbs97531juggling.com/api/webhook/sendcloud
  *   Events: shipment_status_change
  *
  * Pass `order_number = Stripe session ID` when creating shipments via

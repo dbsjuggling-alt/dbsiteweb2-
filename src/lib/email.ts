@@ -208,7 +208,7 @@ function buildShippingHtml(opts: {
           <tr>
             <td style="background:#fafafa;padding:24px 40px;text-align:center;border-top:1px solid #eee;">
               <p style="margin:0;font-size:12px;color:#aaa;">
-                db's Juggling &mdash; <a href="https://dbsjuggling.com" style="color:#673de6;text-decoration:none;">dbsjuggling.com</a>
+                db's Juggling &mdash; <a href="https://dbs97531juggling.com" style="color:#673de6;text-decoration:none;">dbs97531juggling.com</a>
               </p>
             </td>
           </tr>
@@ -340,7 +340,7 @@ function buildConfirmationHtml(opts: {
           <tr>
             <td style="background:#fafafa;padding:24px 40px;text-align:center;border-top:1px solid #eee;">
               <p style="margin:0;font-size:12px;color:#aaa;">
-                db's Juggling &mdash; <a href="https://dbsjuggling.com" style="color:#673de6;text-decoration:none;">dbsjuggling.com</a>
+                db's Juggling &mdash; <a href="https://dbs97531juggling.com" style="color:#673de6;text-decoration:none;">dbs97531juggling.com</a>
               </p>
             </td>
           </tr>
@@ -348,7 +348,7 @@ function buildConfirmationHtml(opts: {
         </table>
 
         <p style="margin-top:16px;font-size:11px;color:#bbb;">
-          Cet email a été envoyé automatiquement suite à ton achat sur dbsjuggling.com.
+          Cet email a été envoyé automatiquement suite à ton achat sur dbs97531juggling.com.
         </p>
 
       </td>

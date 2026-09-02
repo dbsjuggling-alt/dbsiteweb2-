@@ -14,8 +14,7 @@ function getResend(): Resend {
 
 const SENDER = process.env.SENDER_EMAIL || 'dbsjuggling@gmail.com';
 const SENDER_NAME = process.env.SENDER_COMPANY || "db's Juggling";
-// Resend requires a verified sender. Default onboarding@resend.dev works for testing.
-const FROM_EMAIL = process.env.FROM_EMAIL || 'onboarding@resend.dev';
+const FROM_EMAIL = 'contact@dbs97531juggling.com';
 
 // ---------------------------------------------------------------------------
 // Order confirmation — sent right after successful payment

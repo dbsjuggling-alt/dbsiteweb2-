@@ -55,12 +55,15 @@ export const POST: APIRoute = async ({ request }) => {
   console.log('[webhook] Checkout completed:', session.id);
 
   try {
-    // Retrieve the full session with line items + shipping
+    // Retrieve the full session with line items
+    // Note: shipping_details is NOT expandable (it's already in the event data)
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-      expand: ['line_items', 'shipping_details'],
+      expand: ['line_items'],
     });
 
-    const shipping = fullSession.shipping_details;
+    // Shipping details: try new API format (collected_information) first, then classic
+    const collectedShipping = (session as any).collected_information?.shipping_details;
+    const shipping = collectedShipping || session.shipping_details;
     const customerEmail = fullSession.customer_details?.email || 'unknown';
     const customerName = shipping?.name || fullSession.customer_details?.name || 'Client';
     const customerPhone = fullSession.customer_details?.phone || shipping?.phone || '';

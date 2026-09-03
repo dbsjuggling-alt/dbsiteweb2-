@@ -5,6 +5,7 @@
 import type { APIRoute } from 'astro';
 import 'dotenv/config';
 import { validateCode, applyDiscount } from '../../lib/promocodes';
+import { getSettings } from '../../lib/settings';
 
 // These are hardcoded fallbacks if Railway doesn't have the latest code
 const FALLBACK_CODES: Record<string, { discountType: 'percentage' | 'fixed'; discountValue: number; label: string; maxUses: number }> = {
@@ -14,8 +15,9 @@ const FALLBACK_CODES: Record<string, { discountType: 'percentage' | 'fixed'; dis
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const settings = await getSettings();
     const { promoCode, quantity } = await request.json();
-    
+
     if (!promoCode || !promoCode.trim()) {
       return new Response(JSON.stringify({ valid: false, reason: 'Code requis' }), {
         status: 400,
@@ -23,14 +25,16 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const qty = Math.max(1, Math.min(50, parseInt(quantity, 10) || 1));
+    const maxQty = settings.maxQuantity;
+    const qty = Math.max(1, Math.min(maxQty, parseInt(quantity, 10) || 1));
+    const baseUnit = settings.unitPriceCents;
     const code = promoCode.toUpperCase().trim();
-    
+
     // Try the module first
     const result = await validateCode(code, qty);
 
     if (result.valid && result.promo) {
-      const totalCents = 500 * qty;
+      const totalCents = baseUnit * qty;
       const discount = applyDiscount(totalCents, result.promo);
       return new Response(JSON.stringify({
         valid: true,
@@ -52,15 +56,15 @@ export const POST: APIRoute = async ({ request }) => {
     if (fallback) {
       // Compute as if usedCount = 0
       const promo = { code, ...fallback, minQuantity: 1, usedCount: 0, active: true, expiresAt: undefined };
-      const totalCents = 500 * qty;
-      
+      const totalCents = baseUnit * qty;
+
       let saved = 0;
       if (fallback.discountType === 'percentage') {
         saved = Math.round(totalCents * fallback.discountValue / 100);
       } else {
         saved = Math.min(totalCents, fallback.discountValue);
       }
-      
+
       return new Response(JSON.stringify({
         valid: true,
         label: fallback.label,

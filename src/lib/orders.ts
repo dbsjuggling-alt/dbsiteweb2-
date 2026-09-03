@@ -70,6 +70,12 @@ export async function findOrder(sessionId: string): Promise<OrderRecord | null> 
   return orders.find(o => o.stripeSessionId === sessionId) || null;
 }
 
+/** List all orders, most recent first */
+export async function listOrders(): Promise<OrderRecord[]> {
+  const orders = await readAll();
+  return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
 /** Mark an order as shipped with tracking info */
 export async function markShipped(
   sessionId: string,

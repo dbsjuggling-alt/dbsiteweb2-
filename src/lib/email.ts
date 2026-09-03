@@ -6,6 +6,10 @@
  * Sender email must be verified in Resend (domain or single address).
  */
 import { Resend } from 'resend';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // Lazy init — avoids throwing at module import time if env isn't loaded yet
 function getResend(): Resend {
@@ -15,6 +19,48 @@ function getResend(): Resend {
 const SENDER = process.env.SENDER_EMAIL || 'dbsjuggling@gmail.com';
 const SENDER_NAME = process.env.SENDER_COMPANY || "db's Juggling";
 const FROM_EMAIL = 'contact@dbs97531juggling.com';
+
+// ---------------------------------------------------------------------------
+// Email log — persisted to JSON for the admin "Emails" tab
+// ---------------------------------------------------------------------------
+
+const LOG_DIR = join(homedir(), '.hermes', 'data');
+const LOG_FILE = join(LOG_DIR, 'dbs-emails.json');
+
+export interface EmailLogEntry {
+  id: string;
+  type: 'confirmation' | 'shipping' | string;
+  to: string;
+  subject: string;
+  status: 'sent' | 'error';
+  trackingNumber?: string;
+  orderId?: string;
+  createdAt: string; // ISO
+}
+
+export async function listEmailLog(): Promise<EmailLogEntry[]> {
+  try {
+    const raw = await readFile(LOG_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function logEmail(entry: Omit<EmailLogEntry, 'id' | 'createdAt'>): Promise<void> {
+  try {
+    if (!existsSync(LOG_DIR)) await mkdir(LOG_DIR, { recursive: true });
+    const all = await listEmailLog();
+    all.push({
+      ...entry,
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      createdAt: new Date().toISOString(),
+    });
+    await writeFile(LOG_FILE, JSON.stringify(all.slice(-200), null, 2), 'utf-8');
+  } catch {
+    // Silent
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Order confirmation — sent right after successful payment
@@ -65,9 +111,11 @@ export async function sendOrderConfirmation(data: OrderConfirmationData) {
 
   if (error) {
     console.error('[email] Failed to send confirmation:', error);
+    await logEmail({ type: 'confirmation', to: customerEmail, subject: `✅ Commande confirmée — ${quantity} balle${quantity > 1 ? 's' : ''} db's Juggling`, status: 'error', orderId });
     // Don't throw — the webhook should still return 200 to Stripe
   } else {
     console.log('[email] Confirmation sent to', customerEmail);
+    await logEmail({ type: 'confirmation', to: customerEmail, subject: `✅ Commande confirmée — ${quantity} balle${quantity > 1 ? 's' : ''} db's Juggling`, status: 'sent', orderId });
   }
 }
 
@@ -114,8 +162,10 @@ export async function sendShippingNotification(data: ShippingNotificationData) {
 
   if (error) {
     console.error('[email] Failed to send shipping notification:', error);
+    await logEmail({ type: 'shipping', to: customerEmail, subject: `📦 Ta commande ${quantity > 0 ? `(${quantity} balle${quantity > 1 ? 's' : ''}) ` : ''}a été expédiée !`, status: 'error', trackingNumber, orderId });
   } else {
     console.log('[email] Shipping notification sent to', customerEmail);
+    await logEmail({ type: 'shipping', to: customerEmail, subject: `📦 Ta commande ${quantity > 0 ? `(${quantity} balle${quantity > 1 ? 's' : ''}) ` : ''}a été expédiée !`, status: 'sent', trackingNumber, orderId });
   }
 }
 

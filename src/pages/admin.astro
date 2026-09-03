@@ -3,7 +3,12 @@
  * Admin page — hidden behind ADMIN_TOKEN.
  * URL: /admin?token=TON_TOKEN
  *
- * Manages promo codes (list, create, edit, activate/deactivate).
+ * Tabs:
+ *  1. Codes Promo   — list/create/edit/activate promo codes
+ *  2. Commandes     — list orders
+ *  3. Statistiques  — revenue, orders, balls, top promos
+ *  4. Réglages      — unit price, shipping cost, max quantity
+ *  5. Emails        — email log + resend
  */
 import 'dotenv/config';
 import BaseLayout from '../layouts/BaseLayout.astro';
@@ -18,16 +23,26 @@ if (!token || token !== adminToken) {
 
 <BaseLayout lang="fr" page="admin" title="Admin — db's Juggling">
   <div class="py-24">
-    <div class="mx-auto max-w-lg px-6">
+    <div class="mx-auto max-w-4xl px-6">
 
       <div class="mb-14 text-center anim-fade-up">
         <span class="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.2em] text-dbs-purple">ADMIN</span>
         <h1 class="text-3xl font-bold tracking-tight text-dbs-dark sm:text-4xl dark:text-white">
-          Codes promo
+          Gestion de la boutique
         </h1>
       </div>
 
-      <div class="space-y-5 anim-fade-up">
+      <!-- Tabs -->
+      <div class="mb-8 flex flex-wrap gap-1 border-b border-black/[0.06] pb-0 dark:border-white/[0.06]">
+        <button id="tab-promo" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('promo')">Codes Promo</button>
+        <button id="tab-orders" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('orders')">Commandes</button>
+        <button id="tab-stats" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('stats')">Statistiques</button>
+        <button id="tab-settings" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('settings')">Réglages</button>
+        <button id="tab-emails" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('emails')">Emails</button>
+      </div>
+
+      <!-- ============ TAB: PROMO ============ -->
+      <div id="panel-promo" class="space-y-5 anim-fade-up" style="display:none;">
         <p class="mb-6 text-sm text-dbs-dark/50 dark:text-white/30">
           Gérez les codes promotionnels. Les codes sont stockés localement et appliqués via Stripe au checkout.
         </p>
@@ -38,8 +53,8 @@ if (!token || token !== adminToken) {
             <span class="text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Codes existants</span>
             <button onclick="refreshPromoCodes()" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">↻ Actualiser</button>
           </div>
-          <div id="promo-table-container" class="min-h-[100px]">
-            <p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
+          <div id="promo-table-container" class="min-h-[60px]">
+            <p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
           </div>
         </div>
 
@@ -98,6 +113,64 @@ if (!token || token !== adminToken) {
         </div>
       </div>
 
+      <!-- ============ TAB: ORDERS ============ -->
+      <div id="panel-orders" class="space-y-5 anim-fade-up" style="display:none;">
+        <div class="mb-3 flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Commandes reçues</span>
+          <button onclick="loadOrders()" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">↻ Actualiser</button>
+        </div>
+        <div id="orders-container" class="min-h-[60px]">
+          <p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
+        </div>
+      </div>
+
+      <!-- ============ TAB: STATS ============ -->
+      <div id="panel-stats" class="space-y-5 anim-fade-up" style="display:none;">
+        <div class="mb-3 flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Vue d'ensemble</span>
+          <button onclick="loadStats()" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">↻ Actualiser</button>
+        </div>
+        <div id="stats-container" class="min-h-[60px]">
+          <p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
+        </div>
+      </div>
+
+      <!-- ============ TAB: SETTINGS ============ -->
+      <div id="panel-settings" class="space-y-5 anim-fade-up" style="display:none;">
+        <p class="mb-6 text-sm text-dbs-dark/50 dark:text-white/30">
+          Prix et limites de la boutique. Appliqué immédiatement au checkout.
+        </p>
+        <div id="settings-message" class="hidden rounded-xl px-5 py-3 text-sm font-medium"></div>
+        <form id="settings-form" class="space-y-4" onsubmit="saveSettings(event)">
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label for="set-unit-price" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Prix unitaire (€)</label>
+              <input type="number" id="set-unit-price" min="1" step="0.01" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+            <div>
+              <label for="set-shipping" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Frais de port (€)</label>
+              <input type="number" id="set-shipping" min="0" step="0.01" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+            <div>
+              <label for="set-max-qty" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Quantité max</label>
+              <input type="number" id="set-max-qty" min="1" max="200" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+            </div>
+          </div>
+          <button type="submit" class="w-full cursor-pointer rounded-xl bg-dbs-purple px-6 py-3.5 text-sm font-bold text-white transition hover:bg-dbs-purple/90 focus:outline-none focus:ring-2 focus:ring-dbs-purple/40">💾 Enregistrer les réglages</button>
+        </form>
+      </div>
+
+      <!-- ============ TAB: EMAILS ============ -->
+      <div id="panel-emails" class="space-y-5 anim-fade-up" style="display:none;">
+        <div class="mb-3 flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Historique des emails (200 derniers)</span>
+          <button onclick="loadEmails()" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">↻ Actualiser</button>
+        </div>
+        <div id="emails-container" class="min-h-[60px]">
+          <p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
+        </div>
+      </div>
+
       <div class="mt-6 text-center">
         <a href="/" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">← Retour au site</a>
       </div>
@@ -107,11 +180,36 @@ if (!token || token !== adminToken) {
 </BaseLayout>
 
 <script is:inline>
-/* ── Promo Codes Management ── */
+/* ══════════════ TABS ══════════════ */
 const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+const TABS = ['promo', 'orders', 'stats', 'settings', 'emails'];
+let currentTab = 'promo';
 
-function showPromoMsg(type, text) {
-  const el = document.getElementById('promo-message');
+function switchTab(name) {
+  currentTab = name;
+  TABS.forEach(t => {
+    const btn = document.getElementById('tab-' + t);
+    const panel = document.getElementById('panel-' + t);
+    if (t === name) {
+      btn.classList.add('active', 'text-dbs-purple', 'border-dbs-purple');
+      btn.classList.remove('text-dbs-dark/40', 'border-transparent', 'dark:text-white/30');
+      panel.style.display = '';
+    } else {
+      btn.classList.remove('active', 'text-dbs-purple', 'border-dbs-purple');
+      btn.classList.add('text-dbs-dark/40', 'border-transparent', 'dark:text-white/30');
+      panel.style.display = 'none';
+    }
+  });
+  if (name === 'promo') refreshPromoCodes();
+  if (name === 'orders') loadOrders();
+  if (name === 'stats') loadStats();
+  if (name === 'settings') loadSettingsForm();
+  if (name === 'emails') loadEmails();
+}
+
+function adminMsg(elId, type, text) {
+  const el = document.getElementById(elId);
+  if (!el) return;
   el.className = 'rounded-xl px-5 py-3 text-sm font-medium ' + (type === 'success'
     ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
     : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400');
@@ -119,14 +217,29 @@ function showPromoMsg(type, text) {
   el.classList.remove('hidden');
 }
 
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatEur(cents) { return (cents / 100).toFixed(2) + ' €'; }
+
+/* ══════════════ PROMO CODES ══════════════ */
+function showPromoMsg(type, text) { adminMsg('promo-message', type, text); }
+
 async function refreshPromoCodes() {
   const container = document.getElementById('promo-table-container');
-  container.innerHTML = '<p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
+  container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
   try {
     const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN));
     const data = await res.json();
     if (!data.codes || data.codes.length === 0) {
-      container.innerHTML = '<p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Aucun code promo pour le moment.</p>';
+      container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Aucun code promo pour le moment.</p>';
       return;
     }
     let html = '<div class="overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">';
@@ -137,27 +250,25 @@ async function refreshPromoCodes() {
     for (const c of data.codes) {
       const discountStr = c.discountType === 'percentage' ? `-${c.discountValue}%` : `-${(c.discountValue/100).toFixed(2)}€`;
       const usesStr = c.maxUses > 0 ? `${c.usedCount}/${c.maxUses}` : `${c.usedCount}/∞`;
-      let statusStr = '';
-      let statusClass = '';
+      let statusStr = ''; let statusClass = '';
       if (!c.active) { statusStr = 'Désactivé'; statusClass = 'text-red-500'; }
       else if (c.expiresAt && new Date(c.expiresAt) < new Date()) { statusStr = 'Expiré'; statusClass = 'text-orange-500'; }
       else { statusStr = 'Actif'; statusClass = 'text-green-600'; }
       html += `<tr class="border-b border-black/[0.03] dark:border-white/[0.03] hover:bg-black/[0.01] dark:hover:bg-white/[0.02]">`;
-      html += `<td class="px-4 py-3 font-mono text-xs font-bold text-dbs-dark dark:text-white/80">${c.code}</td>`;
-      html += `<td class="px-4 py-3"><span class="rounded-full bg-dbs-purple/[0.08] px-2.5 py-0.5 text-xs font-semibold text-dbs-purple">${c.label || discountStr}</span></td>`;
+      html += `<td class="px-4 py-3 font-mono text-xs font-bold text-dbs-dark dark:text-white/80">${esc(c.code)}</td>`;
+      html += `<td class="px-4 py-3"><span class="rounded-full bg-dbs-purple/[0.08] px-2.5 py-0.5 text-xs font-semibold text-dbs-purple">${esc(c.label || discountStr)}</span></td>`;
       html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${c.minQuantity}</td>`;
       html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${usesStr}</td>`;
       html += `<td class="px-4 py-3"><span class="text-xs font-semibold ${statusClass}">● ${statusStr}</span></td>`;
       html += `<td class="px-4 py-3"><div class="flex gap-2">`;
       html += `<button onclick='editPromoCode(${JSON.stringify(c).replace(/'/g, "\\'")})' class="text-xs text-dbs-purple underline transition hover:text-dbs-purple/70">Modifier</button>`;
-      html += `<button onclick='togglePromoActive("${c.code}", ${!c.active})' class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30">${c.active ? 'Désactiver' : 'Activer'}</button>`;
-      html += `</div></td>`;
-      html += `</tr>`;
+      html += `<button onclick='togglePromoActive("${esc(c.code)}", ${!c.active})' class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30">${c.active ? 'Désactiver' : 'Activer'}</button>`;
+      html += `</div></td></tr>`;
     }
     html += '</tbody></table></div>';
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = '<p class="py-8 text-center text-sm text-red-500">Erreur de chargement : ' + err.message + '</p>';
+    container.innerHTML = '<p class="py-6 text-center text-sm text-red-500">Erreur de chargement : ' + esc(err.message) + '</p>';
   }
 }
 
@@ -165,7 +276,6 @@ async function savePromoCode(e) {
   e.preventDefault();
   const code = document.getElementById('promo-code').value.trim().toUpperCase();
   if (!code) { showPromoMsg('error', 'Le code est requis.'); return; }
-
   const payload = {
     code,
     discountType: document.getElementById('promo-discount-type').value,
@@ -176,12 +286,9 @@ async function savePromoCode(e) {
     expiresAt: document.getElementById('promo-expires').value || undefined,
     active: document.getElementById('promo-active').checked,
   };
-
   try {
     const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (data.success) {
@@ -191,9 +298,7 @@ async function savePromoCode(e) {
     } else {
       showPromoMsg('error', '❌ ' + (data.error || 'Erreur inconnue'));
     }
-  } catch (err) {
-    showPromoMsg('error', '❌ Erreur réseau : ' + err.message);
-  }
+  } catch (err) { showPromoMsg('error', '❌ Erreur réseau : ' + err.message); }
 }
 
 function editPromoCode(c) {
@@ -207,7 +312,6 @@ function editPromoCode(c) {
   document.getElementById('promo-expires').value = c.expiresAt ? c.expiresAt.split('T')[0] : '';
   document.getElementById('promo-active').checked = c.active;
   document.getElementById('promo-code').focus();
-  document.getElementById('promo-code').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function resetPromoForm() {
@@ -220,28 +324,182 @@ function resetPromoForm() {
 
 async function togglePromoActive(code, newActive) {
   if (newActive) {
-    // Reactivate: fetch current data first to preserve all fields
     const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN));
     const data = await res.json();
     const found = data.codes?.find(c => c.code === code);
     if (found) {
       found.active = true;
       await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(found),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(found),
       });
     }
   } else {
-    await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN) + '&code=' + encodeURIComponent(code), {
-      method: 'DELETE',
-    });
+    await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN) + '&code=' + encodeURIComponent(code), { method: 'DELETE' });
   }
   showPromoMsg('success', newActive ? '✅ Code ' + code + ' réactivé !' : '⏸️ Code ' + code + ' désactivé.');
   refreshPromoCodes();
 }
 
-document.addEventListener('DOMContentLoaded', refreshPromoCodes);
+/* ══════════════ ORDERS ══════════════ */
+async function loadOrders() {
+  const container = document.getElementById('orders-container');
+  container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
+  try {
+    const res = await fetch('/api/admin/orders?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    if (!data.orders || data.orders.length === 0) {
+      container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Aucune commande pour le moment.</p>';
+      return;
+    }
+    let html = '<div class="overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">';
+    html += '<table class="w-full text-left text-sm">';
+    html += '<thead><tr class="border-b border-black/[0.06] dark:border-white/[0.06] text-[11px] font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">';
+    html += '<th class="px-4 py-3">Date</th><th class="px-4 py-3">Client</th><th class="px-4 py-3">Qté</th><th class="px-4 py-3">Total</th><th class="px-4 py-3">Pays</th><th class="px-4 py-3">Statut</th><th class="px-4 py-3">Suivi</th></tr></thead><tbody>';
+    for (const o of data.orders) {
+      const statusMap = { confirmed: ['Confirmée', 'text-orange-500'], shipped: ['Expédiée', 'text-green-600'], delivered: ['Livrée', 'text-blue-600'] };
+      const [statusStr, statusClass] = statusMap[o.status] || [o.status, 'text-dbs-dark/50'];
+      html += `<tr class="border-b border-black/[0.03] dark:border-white/[0.03] hover:bg-black/[0.01] dark:hover:bg-white/[0.02]">`;
+      html += `<td class="px-4 py-3 text-xs whitespace-nowrap text-dbs-dark/50 dark:text-white/30">${formatDate(o.createdAt)}</td>`;
+      html += `<td class="px-4 py-3"><div class="text-xs font-semibold text-dbs-dark dark:text-white/80">${esc(o.customerName)}</div><div class="text-[11px] text-dbs-dark/40 dark:text-white/30">${esc(o.customerEmail)}</div></td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${o.quantity}</td>`;
+      html += `<td class="px-4 py-3 text-xs font-bold text-dbs-dark dark:text-white/80">${(o.total || 0).toFixed(2)} €</td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${esc(o.country || '')} <span class="text-dbs-dark/25 dark:text-white/20">${esc(o.postalCode || '')}</span></td>`;
+      html += `<td class="px-4 py-3"><span class="text-xs font-semibold ${statusClass}">● ${statusStr}</span></td>`;
+      html += `<td class="px-4 py-3 text-xs font-mono text-dbs-dark/50 dark:text-white/30">${esc(o.trackingNumber || '—')}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<p class="py-6 text-center text-sm text-red-500">Erreur de chargement : ' + esc(err.message) + '</p>';
+  }
+}
+
+/* ══════════════ STATS ══════════════ */
+async function loadStats() {
+  const container = document.getElementById('stats-container');
+  container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
+  try {
+    const res = await fetch('/api/admin/stats?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+
+    const card = (label, value, sub) => `
+      <div class="rounded-xl border border-black/[0.05] bg-white p-5 dark:border-white/[0.05] dark:bg-white/[0.03]">
+        <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-dbs-dark/35 dark:text-white/25">${label}</p>
+        <p class="mt-1.5 text-2xl font-extrabold text-dbs-dark dark:text-white/90">${value}</p>
+        ${sub ? `<p class="mt-0.5 text-[11px] text-dbs-dark/35 dark:text-white/25">${sub}</p>` : ''}
+      </div>`;
+
+    let html = '<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">';
+    html += card('CA ce mois', data.monthRevenue.toFixed(2) + ' €', data.monthOrders + ' commande' + (data.monthOrders > 1 ? 's' : ''));
+    html += card('Balles ce mois', data.monthBalls);
+    html += card('CA cette année', data.yearRevenue.toFixed(2) + ' €', data.yearOrders + ' commande' + (data.yearOrders > 1 ? 's' : ''));
+    html += card('Total ventes', data.totalRevenue.toFixed(2) + ' €');
+    html += card('Commandes', data.totalOrders, (data.confirmedOrders || 0) + ' en attente · ' + (data.shippedOrders || 0) + ' expédiées');
+    html += card('Balles vendues', data.totalBalls);
+    html += '</div>';
+
+    html += '<div class="mt-6">';
+    html += '<span class="mb-3 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Codes promo les plus utilisés</span>';
+    if (!data.topPromos || data.topPromos.length === 0) {
+      html += '<p class="text-sm text-dbs-dark/30 dark:text-white/20">Aucun code promo utilisé pour le moment.</p>';
+    } else {
+      html += '<div class="overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]"><table class="w-full text-left text-sm"><thead><tr class="border-b border-black/[0.06] dark:border-white/[0.06] text-[11px] font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30"><th class="px-4 py-3">Code</th><th class="px-4 py-3">Réduction</th><th class="px-4 py-3">Utilisations</th></tr></thead><tbody>';
+      for (const p of data.topPromos) {
+        html += `<tr class="border-b border-black/[0.03] dark:border-white/[0.03]"><td class="px-4 py-3 font-mono text-xs font-bold text-dbs-dark dark:text-white/80">${esc(p.code)}</td><td class="px-4 py-3"><span class="rounded-full bg-dbs-purple/[0.08] px-2.5 py-0.5 text-xs font-semibold text-dbs-purple">${esc(p.label || '')}</span></td><td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${p.usedCount}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<p class="py-6 text-center text-sm text-red-500">Erreur de chargement : ' + esc(err.message) + '</p>';
+  }
+}
+
+/* ══════════════ SETTINGS ══════════════ */
+async function loadSettingsForm() {
+  try {
+    const res = await fetch('/api/admin/settings?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    if (data.settings) {
+      document.getElementById('set-unit-price').value = (data.settings.unitPriceCents / 100).toFixed(2);
+      document.getElementById('set-shipping').value = (data.settings.shippingCents / 100).toFixed(2);
+      document.getElementById('set-max-qty').value = data.settings.maxQuantity;
+    }
+  } catch (err) {
+    adminMsg('settings-message', 'error', '❌ ' + err.message);
+  }
+}
+
+async function saveSettings(e) {
+  e.preventDefault();
+  const unitPriceCents = Math.round(parseFloat(document.getElementById('set-unit-price').value) * 100);
+  const shippingCents = Math.round(parseFloat(document.getElementById('set-shipping').value) * 100);
+  const maxQuantity = parseInt(document.getElementById('set-max-qty').value, 10);
+  if (!unitPriceCents || unitPriceCents < 100) { adminMsg('settings-message', 'error', 'Prix unitaire minimum : 1 €'); return; }
+  try {
+    const res = await fetch('/api/admin/settings?token=' + encodeURIComponent(TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unitPriceCents, shippingCents, maxQuantity }),
+    });
+    const data = await res.json();
+    if (data.success) adminMsg('settings-message', 'success', '✅ Réglages enregistrés !');
+    else adminMsg('settings-message', 'error', '❌ ' + (data.error || 'Erreur'));
+  } catch (err) { adminMsg('settings-message', 'error', '❌ ' + err.message); }
+}
+
+/* ══════════════ EMAILS ══════════════ */
+async function loadEmails() {
+  const container = document.getElementById('emails-container');
+  container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
+  try {
+    const res = await fetch('/api/admin/emails?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    if (!data.emails || data.emails.length === 0) {
+      container.innerHTML = '<p class="py-6 text-center text-sm text-dbs-dark/30 dark:text-white/20">Aucun email envoyé pour le moment.</p>';
+      return;
+    }
+    let html = '<div class="overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">';
+    html += '<table class="w-full text-left text-sm">';
+    html += '<thead><tr class="border-b border-black/[0.06] dark:border-white/[0.06] text-[11px] font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">';
+    html += '<th class="px-4 py-3">Date</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Destinataire</th><th class="px-4 py-3">Sujet</th><th class="px-4 py-3">Statut</th><th class="px-4 py-3">Action</th></tr></thead><tbody>';
+    for (const em of data.emails) {
+      const typeStr = em.type === 'confirmation' ? '✅ Confirmation' : em.type === 'shipping' ? '📦 Expédition' : em.type;
+      html += `<tr class="border-b border-black/[0.03] dark:border-white/[0.03] hover:bg-black/[0.01] dark:hover:bg-white/[0.02]">`;
+      html += `<td class="px-4 py-3 text-xs whitespace-nowrap text-dbs-dark/50 dark:text-white/30">${formatDate(em.createdAt)}</td>`;
+      html += `<td class="px-4 py-3 text-xs">${typeStr}</td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark dark:text-white/80">${esc(em.to)}</td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark/60 dark:text-white/50 max-w-[220px] truncate">${esc(em.subject)}</td>`;
+      html += `<td class="px-4 py-3"><span class="text-xs font-semibold ${em.status === 'sent' ? 'text-green-600' : 'text-red-500'}">${em.status === 'sent' ? '● Envoyé' : '● Erreur'}</span></td>`;
+      html += `<td class="px-4 py-3">${em.orderId ? `<button onclick='resendEmail("${esc(em.orderId)}")' class="text-xs text-dbs-purple underline transition hover:text-dbs-purple/70">Ré-envoyer</button>` : '<span class="text-xs text-dbs-dark/25 dark:text-white/20">—</span>'}</td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<p class="py-6 text-center text-sm text-red-500">Erreur de chargement : ' + esc(err.message) + '</p>';
+  }
+}
+
+async function resendEmail(orderId) {
+  try {
+    const res = await fetch('/api/admin/emails?token=' + encodeURIComponent(TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ orderId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert('✅ Email ré-envoyé : ' + (data.type === 'shipping' ? 'notification expédition' : 'confirmation de commande') + '.');
+      loadEmails();
+    } else {
+      alert('❌ ' + (data.error || 'Erreur'));
+    }
+  } catch (err) { alert('❌ ' + err.message); }
+}
+
+/* Init — open promo tab by default */
+document.addEventListener('DOMContentLoaded', () => switchTab('promo'));
 </script>
 
 <style>

@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import 'dotenv/config';
 import Stripe from 'stripe';
 import { validateCode, applyDiscount, markUsed } from '../../lib/promocodes';
+import { getSettings } from '../../lib/settings';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-04-10',
@@ -11,9 +12,11 @@ const STRIPE_MINIMUM_CENTS = 50;
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const settings = await getSettings();
     const { quantity, unitAmount, promoCode } = await request.json();
-    const qty = Math.max(1, Math.min(50, parseInt(quantity, 10) || 1));
-    const baseUnit = parseInt(unitAmount, 10) || 500;
+    const maxQty = settings.maxQuantity;
+    const qty = Math.max(1, Math.min(maxQty, parseInt(quantity, 10) || 1));
+    const baseUnit = parseInt(unitAmount, 10) || settings.unitPriceCents;
     const productsCents = baseUnit * qty;
 
     let appliedPromo: { code: string; label: string } | null = null;
@@ -92,7 +95,7 @@ export const POST: APIRoute = async ({ request }) => {
         {
           shipping_rate_data: {
             type: 'fixed_amount',
-            fixed_amount: { amount: 50, currency: 'eur' },
+            fixed_amount: { amount: settings.shippingCents, currency: 'eur' },
             display_name: 'Standard Shipping (Tracked)',
             delivery_estimate: {
               minimum: { unit: 'business_day', value: 2 },

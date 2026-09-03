@@ -103,7 +103,20 @@ const savedAmount = document.getElementById('saved-amount');
 let promoApplied = false;
 let currentCode = '';
 
-function getUnitPrice(qty) { return 500; }
+// Store settings (fetched from server)
+let storeSettings = { unitPriceCents: 500, maxQuantity: 50 };
+
+// Fetch settings on load
+fetch('/api/settings').then(r => r.json()).then(data => {
+  if (data.settings) {
+    storeSettings = data.settings;
+    document.getElementById('qty-input').max = storeSettings.maxQuantity;
+    document.getElementById('unit-price').textContent = '\u20AC' + ((storeSettings.unitPriceCents / 100).toFixed(2));
+    updateDisplay();
+  }
+}).catch(() => {});
+
+function getUnitPrice(qty) { return storeSettings.unitPriceCents; }
 function getTotal(qty) { return getUnitPrice(qty) * qty; }
 function formatEur(cents) { return '\u20AC' + (cents / 100).toFixed(2); }
 
@@ -123,7 +136,7 @@ function updateDisplay() {
 }
 
 qtyMinus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) > 1) qtyInput.value--; updateDisplay(); });
-qtyPlus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) < 50) qtyInput.value++; updateDisplay(); });
+qtyPlus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) < storeSettings.maxQuantity) qtyInput.value++; updateDisplay(); });
 qtyInput.addEventListener('change', updateDisplay);
 qtyInput.addEventListener('input', updateDisplay);
 
@@ -132,7 +145,7 @@ checkoutBtn.addEventListener('click', async () => {
   checkoutBtn.disabled = true;
   checkoutBtn.textContent = 'Loading...';
   try {
-    const body = { quantity: qty, unitAmount: 500 };
+    const body = { quantity: qty, unitAmount: storeSettings.unitPriceCents };
     if (promoApplied && currentCode) body.promoCode = currentCode;
     const res = await fetch('/api/checkout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await res.json();

@@ -1,20 +1,9 @@
 /**
- * Promo codes — seeded in code, persisted to JSON for usage counts.
- *
- * Built-in codes (TEST99, WELCOME10) are always available.
- * Usage counts are persisted when possible but failures are silent
- * (important for Railway's ephemeral filesystem).
- *
- * File: ~/.hermes/data/dbs-promocodes.json
+ * Promo codes — stored in PostgreSQL.
+ * Seed codes (TEST99, WELCOME10) are always present, usage counts are live in DB.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
-const DATA_DIR = join(homedir(), '.hermes', 'data');
-const DATA_FILE = join(DATA_DIR, 'dbs-promocodes.json');
+import { getDb } from './db';
 
 export interface PromoCode {
   code: string;
@@ -28,7 +17,7 @@ export interface PromoCode {
   label: string;
 }
 
-// Built-in seed codes — always available, cannot be removed
+// Built-in seed codes — always available (inserted if missing)
 const SEED_CODES: PromoCode[] = [
   {
     code: 'TEST99',
@@ -52,45 +41,39 @@ const SEED_CODES: PromoCode[] = [
   },
 ];
 
-async function ensureDir(): Promise<void> {
-  if (!existsSync(DATA_DIR)) {
-    try { await mkdir(DATA_DIR, { recursive: true }); } catch {}
+function rowToPromo(row: any): PromoCode {
+  return {
+    code: row.code,
+    discountType: row.discount_type,
+    discountValue: row.discount_value,
+    minQuantity: row.min_quantity,
+    maxUses: row.max_uses,
+    usedCount: row.used_count,
+    expiresAt: row.expires_at ? (row.expires_at instanceof Date ? row.expires_at.toISOString() : row.expires_at) : undefined,
+    active: row.active,
+    label: row.label || '',
+  };
+}
+
+/** Ensure seed codes exist in the DB (no-op if already there) */
+async function ensureSeeds(): Promise<void> {
+  const db = await getDb();
+  for (const s of SEED_CODES) {
+    await db.query(
+      `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
+       VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$8)
+       ON CONFLICT (code) DO NOTHING`,
+      [s.code, s.discountType, s.discountValue, s.minQuantity, s.maxUses, s.usedCount, s.active, s.label],
+    );
   }
 }
 
-async function readAll(): Promise<PromoCode[]> {
-  // Start with seed codes
-  const merged = new Map<string, PromoCode>();
-  for (const s of SEED_CODES) merged.set(s.code, { ...s });
-
-  // Try to merge with persisted file (usage counts)
-  try {
-    await ensureDir();
-    const raw = await readFile(DATA_FILE, 'utf-8');
-    const persisted: PromoCode[] = JSON.parse(raw);
-    for (const p of persisted) {
-      // Merge: seed code → keep seed definition but restore usedCount
-      // Custom code → add it
-      if (merged.has(p.code)) {
-        merged.set(p.code, { ...merged.get(p.code)!, usedCount: p.usedCount });
-      } else {
-        merged.set(p.code, p);
-      }
-    }
-  } catch {
-    // First run — seed codes are enough
-  }
-
-  return Array.from(merged.values());
-}
-
-async function writeAll(codes: PromoCode[]): Promise<void> {
-  try {
-    await ensureDir();
-    await writeFile(DATA_FILE, JSON.stringify(codes, null, 2), 'utf-8');
-  } catch {
-    // Silent — filesystem may not be writable (Railway)
-  }
+/** List all promo codes */
+export async function listCodes(): Promise<PromoCode[]> {
+  await ensureSeeds();
+  const db = await getDb();
+  const res = await db.query('SELECT * FROM promocodes ORDER BY code');
+  return res.rows.map(rowToPromo);
 }
 
 /** Validate a promo code and return its details (or null if invalid) */
@@ -98,7 +81,7 @@ export async function validateCode(
   code: string,
   quantity: number,
 ): Promise<{ valid: boolean; reason?: string; promo?: PromoCode }> {
-  const codes = await readAll();
+  const codes = await listCodes();
   const upper = code.toUpperCase().trim();
   const promo = codes.find(c => c.code === upper);
 
@@ -143,27 +126,38 @@ export function applyDiscount(
 
 /** Increment usage count for a promo code */
 export async function markUsed(code: string): Promise<void> {
-  const codes = await readAll();
-  const promo = codes.find(c => c.code === code.toUpperCase().trim());
-  if (promo) {
-    promo.usedCount += 1;
-    await writeAll(codes);
-  }
+  const db = await getDb();
+  await db.query(
+    'UPDATE promocodes SET used_count = used_count + 1 WHERE code = $1',
+    [code.toUpperCase().trim()],
+  );
 }
 
-/** List all promo codes */
-export async function listCodes(): Promise<PromoCode[]> {
-  return readAll();
-}
-
-/** Add or update a promo code */
+/** Persist a promo code (insert or update) */
 export async function saveCode(promo: PromoCode): Promise<void> {
-  const codes = await readAll();
-  const idx = codes.findIndex(c => c.code === promo.code);
-  if (idx >= 0) {
-    codes[idx] = promo;
-  } else {
-    codes.push(promo);
-  }
-  await writeAll(codes);
+  const db = await getDb();
+  await db.query(
+    `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (code) DO UPDATE SET
+       discount_type = EXCLUDED.discount_type,
+       discount_value = EXCLUDED.discount_value,
+       min_quantity = EXCLUDED.min_quantity,
+       max_uses = EXCLUDED.max_uses,
+       used_count = EXCLUDED.used_count,
+       expires_at = EXCLUDED.expires_at,
+       active = EXCLUDED.active,
+       label = EXCLUDED.label`,
+    [
+      promo.code,
+      promo.discountType,
+      promo.discountValue,
+      promo.minQuantity,
+      promo.maxUses,
+      promo.usedCount,
+      promo.expiresAt || null,
+      promo.active,
+      promo.label || '',
+    ],
+  );
 }

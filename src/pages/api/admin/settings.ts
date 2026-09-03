@@ -5,7 +5,8 @@
  */
 import type { APIRoute } from 'astro';
 import 'dotenv/config';
-import { getSettings, saveSettings, DEFAULT_SETTINGS, StoreSettings } from '../../../lib/settings';
+import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../../../lib/settings';
+import type { StoreSettings } from '../../../lib/settings';
 
 export const GET: APIRoute = async ({ request }) => {
   const url = new URL(request.url);

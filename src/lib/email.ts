@@ -6,10 +6,7 @@
  * Sender email must be verified in Resend (domain or single address).
  */
 import { Resend } from 'resend';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { getDb } from './db';
 
 // Lazy init — avoids throwing at module import time if env isn't loaded yet
 function getResend(): Resend {
@@ -21,11 +18,8 @@ const SENDER_NAME = process.env.SENDER_COMPANY || "db's Juggling";
 const FROM_EMAIL = 'contact@dbs97531juggling.com';
 
 // ---------------------------------------------------------------------------
-// Email log — persisted to JSON for the admin "Emails" tab
+// Email log — persisted to PostgreSQL for the admin "Emails" tab
 // ---------------------------------------------------------------------------
-
-const LOG_DIR = join(homedir(), '.hermes', 'data');
-const LOG_FILE = join(LOG_DIR, 'dbs-emails.json');
 
 export interface EmailLogEntry {
   id: string;
@@ -40,8 +34,20 @@ export interface EmailLogEntry {
 
 export async function listEmailLog(): Promise<EmailLogEntry[]> {
   try {
-    const raw = await readFile(LOG_FILE, 'utf-8');
-    return JSON.parse(raw);
+    const db = await getDb();
+    const res = await db.query(
+      'SELECT * FROM email_log ORDER BY created_at DESC LIMIT 200',
+    );
+    return res.rows.map((row: any) => ({
+      id: row.id,
+      type: row.type,
+      to: row.to_address,
+      subject: row.subject,
+      status: row.status,
+      trackingNumber: row.tracking_number || undefined,
+      orderId: row.order_id || undefined,
+      createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+    }));
   } catch {
     return [];
   }
@@ -49,16 +55,15 @@ export async function listEmailLog(): Promise<EmailLogEntry[]> {
 
 async function logEmail(entry: Omit<EmailLogEntry, 'id' | 'createdAt'>): Promise<void> {
   try {
-    if (!existsSync(LOG_DIR)) await mkdir(LOG_DIR, { recursive: true });
-    const all = await listEmailLog();
-    all.push({
-      ...entry,
-      id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      createdAt: new Date().toISOString(),
-    });
-    await writeFile(LOG_FILE, JSON.stringify(all.slice(-200), null, 2), 'utf-8');
+    const db = await getDb();
+    const id = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    await db.query(
+      `INSERT INTO email_log (id, type, to_address, subject, status, tracking_number, order_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, entry.type, entry.to, entry.subject, entry.status, entry.trackingNumber || null, entry.orderId || null],
+    );
   } catch {
-    // Silent
+    // Silent — logging must never break email sending
   }
 }
 

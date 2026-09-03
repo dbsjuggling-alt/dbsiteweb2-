@@ -1,18 +1,9 @@
 /**
  * Store settings — unit price, shipping cost, max quantity.
- * Persisted to JSON so they can be changed from the admin page
- * without touching the code.
- *
- * File: ~/.hermes/data/dbs-settings.json
+ * Stored in PostgreSQL so changes from the admin page survive redeploys.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
-const DATA_DIR = join(homedir(), '.hermes', 'data');
-const DATA_FILE = join(DATA_DIR, 'dbs-settings.json');
+import { getDb } from './db';
 
 export interface StoreSettings {
   unitPriceCents: number;  // price of one ball, in cents (default 500 = 5€)
@@ -26,21 +17,23 @@ export const DEFAULT_SETTINGS: StoreSettings = {
   maxQuantity: 50,
 };
 
-async function ensureDir(): Promise<void> {
-  if (!existsSync(DATA_DIR)) {
-    try { await mkdir(DATA_DIR, { recursive: true }); } catch {}
-  }
-}
+const KEYS = {
+  unitPriceCents: 'unit_price_cents',
+  shippingCents: 'shipping_cents',
+  maxQuantity: 'max_quantity',
+} as const;
 
 export async function getSettings(): Promise<StoreSettings> {
   try {
-    await ensureDir();
-    const raw = await readFile(DATA_FILE, 'utf-8');
-    const parsed = JSON.parse(raw);
+    const db = await getDb();
+    const res = await db.query('SELECT key, value FROM settings');
+    const map: Record<string, string> = {};
+    for (const row of res.rows) map[row.key] = row.value;
+
     return {
-      unitPriceCents: typeof parsed.unitPriceCents === 'number' ? parsed.unitPriceCents : DEFAULT_SETTINGS.unitPriceCents,
-      shippingCents: typeof parsed.shippingCents === 'number' ? parsed.shippingCents : DEFAULT_SETTINGS.shippingCents,
-      maxQuantity: typeof parsed.maxQuantity === 'number' ? parsed.maxQuantity : DEFAULT_SETTINGS.maxQuantity,
+      unitPriceCents: map[KEYS.unitPriceCents] !== undefined ? parseInt(map[KEYS.unitPriceCents], 10) : DEFAULT_SETTINGS.unitPriceCents,
+      shippingCents: map[KEYS.shippingCents] !== undefined ? parseInt(map[KEYS.shippingCents], 10) : DEFAULT_SETTINGS.shippingCents,
+      maxQuantity: map[KEYS.maxQuantity] !== undefined ? parseInt(map[KEYS.maxQuantity], 10) : DEFAULT_SETTINGS.maxQuantity,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -48,10 +41,17 @@ export async function getSettings(): Promise<StoreSettings> {
 }
 
 export async function saveSettings(settings: StoreSettings): Promise<void> {
-  try {
-    await ensureDir();
-    await writeFile(DATA_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch {
-    // Silent — filesystem may not be writable (Railway)
+  const db = await getDb();
+  const entries: [string, string][] = [
+    [KEYS.unitPriceCents, String(settings.unitPriceCents)],
+    [KEYS.shippingCents, String(settings.shippingCents)],
+    [KEYS.maxQuantity, String(settings.maxQuantity)],
+  ];
+  for (const [key, value] of entries) {
+    await db.query(
+      `INSERT INTO settings (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [key, value],
+    );
   }
 }

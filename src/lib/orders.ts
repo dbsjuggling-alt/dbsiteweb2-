@@ -1,18 +1,9 @@
 /**
- * Simple order storage — JSON file-based.
- * Saves order info (email, name, quantity) indexed by Stripe session ID.
- * Lets SendCloud webhook look up customer details when tracking is available.
- *
- * File: ~/.hermes/data/dbs-orders.json (persistent across restarts)
+ * Order storage — PostgreSQL.
+ * Stores order info (email, name, quantity) indexed by Stripe session ID.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
-const DATA_DIR = join(homedir(), '.hermes', 'data');
-const DATA_FILE = join(DATA_DIR, 'dbs-orders.json');
+import { getDb } from './db';
 
 export interface OrderRecord {
   stripeSessionId: string;
@@ -30,50 +21,74 @@ export interface OrderRecord {
   createdAt: string; // ISO
 }
 
-async function ensureDir(): Promise<void> {
-  if (!existsSync(DATA_DIR)) {
-    await mkdir(DATA_DIR, { recursive: true });
-  }
+function rowToOrder(row: any): OrderRecord {
+  return {
+    stripeSessionId: row.stripe_session_id,
+    customerEmail: row.customer_email,
+    customerName: row.customer_name,
+    quantity: row.quantity,
+    total: row.total,
+    shippingAddress: row.shipping_address || '',
+    city: row.city || '',
+    postalCode: row.postal_code || '',
+    country: row.country || '',
+    carrier: row.carrier || undefined,
+    trackingNumber: row.tracking_number || undefined,
+    status: row.status,
+    createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
+  };
 }
 
-async function readAll(): Promise<OrderRecord[]> {
-  try {
-    await ensureDir();
-    const raw = await readFile(DATA_FILE, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-async function writeAll(orders: OrderRecord[]): Promise<void> {
-  await ensureDir();
-  await writeFile(DATA_FILE, JSON.stringify(orders, null, 2), 'utf-8');
-}
-
-/** Save a new order after Stripe payment */
+/** Save a new order after Stripe payment (idempotent on session id) */
 export async function saveOrder(record: OrderRecord): Promise<void> {
-  const orders = await readAll();
-  // Replace if already exists (idempotent)
-  const idx = orders.findIndex(o => o.stripeSessionId === record.stripeSessionId);
-  if (idx >= 0) {
-    orders[idx] = record;
-  } else {
-    orders.push(record);
-  }
-  await writeAll(orders);
+  const db = await getDb();
+  await db.query(
+    `INSERT INTO orders (stripe_session_id, customer_email, customer_name, quantity, total,
+       shipping_address, city, postal_code, country, carrier, tracking_number, status, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+     ON CONFLICT (stripe_session_id) DO UPDATE SET
+       customer_email = EXCLUDED.customer_email,
+       customer_name = EXCLUDED.customer_name,
+       quantity = EXCLUDED.quantity,
+       total = EXCLUDED.total,
+       shipping_address = EXCLUDED.shipping_address,
+       city = EXCLUDED.city,
+       postal_code = EXCLUDED.postal_code,
+       country = EXCLUDED.country,
+       carrier = EXCLUDED.carrier,
+       tracking_number = EXCLUDED.tracking_number,
+       status = EXCLUDED.status`,
+    [
+      record.stripeSessionId,
+      record.customerEmail,
+      record.customerName,
+      record.quantity,
+      record.total,
+      record.shippingAddress,
+      record.city,
+      record.postalCode,
+      record.country,
+      record.carrier || null,
+      record.trackingNumber || null,
+      record.status,
+      record.createdAt || new Date().toISOString(),
+    ],
+  );
 }
 
 /** Find an order by its Stripe session ID */
 export async function findOrder(sessionId: string): Promise<OrderRecord | null> {
-  const orders = await readAll();
-  return orders.find(o => o.stripeSessionId === sessionId) || null;
+  const db = await getDb();
+  const res = await db.query('SELECT * FROM orders WHERE stripe_session_id = $1', [sessionId]);
+  if (res.rows.length === 0) return null;
+  return rowToOrder(res.rows[0]);
 }
 
 /** List all orders, most recent first */
 export async function listOrders(): Promise<OrderRecord[]> {
-  const orders = await readAll();
-  return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const db = await getDb();
+  const res = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
+  return res.rows.map(rowToOrder);
 }
 
 /** Mark an order as shipped with tracking info */
@@ -82,14 +97,12 @@ export async function markShipped(
   trackingNumber: string,
   carrier: string,
 ): Promise<OrderRecord | null> {
-  const orders = await readAll();
-  const order = orders.find(o => o.stripeSessionId === sessionId);
-  if (!order) return null;
-
-  order.status = 'shipped';
-  order.trackingNumber = trackingNumber;
-  order.carrier = carrier;
-  order.createdAt = order.createdAt || new Date().toISOString();
-  await writeAll(orders);
-  return order;
+  const db = await getDb();
+  const res = await db.query(
+    `UPDATE orders SET status = 'shipped', tracking_number = $2, carrier = $3
+     WHERE stripe_session_id = $1 RETURNING *`,
+    [sessionId, trackingNumber, carrier],
+  );
+  if (res.rows.length === 0) return null;
+  return rowToOrder(res.rows[0]);
 }

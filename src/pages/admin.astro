@@ -159,6 +159,7 @@ if (Astro.request.method === 'POST') {
       <div class="mb-8 flex gap-2 border-b border-black/[0.06] pb-0 dark:border-white/[0.06]">
         <button id="tab-create" class="tab-btn active px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-purple border-b-2 border-dbs-purple" onclick="switchTab('create')">Créer expédition</button>
         <button id="tab-email" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('email')">Email suivi manuel</button>
+        <button id="tab-promo" class="tab-btn px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30 border-b-2 border-transparent" onclick="switchTab('promo')">Codes Promo</button>
       </div>
 
       <!-- Tab: Create shipment -->
@@ -352,6 +353,78 @@ if (Astro.request.method === 'POST') {
         </form>
       </div>
 
+      <!-- Tab: Promo codes -->
+      <div id="panel-promo" class="space-y-5 anim-fade-up" style="display:none;">
+        <p class="mb-6 text-sm text-dbs-dark/50 dark:text-white/30">
+          Gérez les codes promotionnels. Les codes sont stockés localement et appliqués via Stripe au checkout.
+        </p>
+        <div id="promo-message" class="hidden rounded-xl px-5 py-3 text-sm font-medium"></div>
+
+        <div id="promo-table-wrapper">
+          <div class="mb-3 flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Codes existants</span>
+            <button onclick="refreshPromoCodes()" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">↻ Actualiser</button>
+          </div>
+          <div id="promo-table-container" class="min-h-[100px]">
+            <p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>
+          </div>
+        </div>
+
+        <hr class="border-black/[0.06] dark:border-white/[0.06]" />
+
+        <div>
+          <span class="mb-3 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Ajouter / modifier un code</span>
+          <form id="promo-form" class="space-y-4" onsubmit="savePromoCode(event)">
+            <input type="hidden" id="edit-original-code" value="" />
+            <div>
+              <label for="promo-code" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Code *</label>
+              <input type="text" id="promo-code" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15 font-mono uppercase tracking-wider" placeholder="SUMMER20" />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="promo-discount-type" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Type</label>
+                <select id="promo-discount-type" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90">
+                  <option value="percentage">Pourcentage</option>
+                  <option value="fixed">Montant fixe (€)</option>
+                </select>
+              </div>
+              <div>
+                <label for="promo-discount-value" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Valeur</label>
+                <input type="number" id="promo-discount-value" min="1" value="10" required class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+              </div>
+            </div>
+            <div>
+              <label for="promo-label" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Étiquette (optionnel, ex: -10%)</label>
+              <input type="text" id="promo-label" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark placeholder-dbs-dark/20 transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90 dark:placeholder-white/15" placeholder="ex: -20%" />
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+              <div>
+                <label for="promo-min-qty" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Min. quantité</label>
+                <input type="number" id="promo-min-qty" min="1" value="1" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+              </div>
+              <div>
+                <label for="promo-max-uses" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Max. utilisations</label>
+                <input type="number" id="promo-max-uses" min="0" value="50" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+                <p class="mt-1 text-[10px] text-dbs-dark/30 dark:text-white/20">0 = illimité</p>
+              </div>
+              <div>
+                <label for="promo-expires" class="mb-1.5 block text-xs font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">Expire le</label>
+                <input type="date" id="promo-expires" class="w-full rounded-xl border border-black/[0.06] bg-white px-5 py-3.5 text-sm text-dbs-dark transition focus:border-dbs-purple/40 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-white/90" />
+                <p class="mt-1 text-[10px] text-dbs-dark/30 dark:text-white/20">Optionnel</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="promo-active" checked class="h-4 w-4 rounded border-black/[0.15] text-dbs-purple focus:ring-dbs-purple/40 dark:border-white/[0.15] dark:bg-white/[0.05]" />
+              <label for="promo-active" class="text-sm text-dbs-dark/60 dark:text-white/40">Actif</label>
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="flex-1 cursor-pointer rounded-xl bg-dbs-purple px-6 py-3.5 text-sm font-bold text-white transition hover:bg-dbs-purple/90 focus:outline-none focus:ring-2 focus:ring-dbs-purple/40">💾 Enregistrer le code</button>
+              <button type="button" onclick="resetPromoForm()" class="cursor-pointer rounded-xl border border-black/[0.08] px-6 py-3.5 text-sm font-medium text-dbs-dark/50 transition hover:bg-black/[0.02] dark:border-white/[0.08] dark:text-white/30 dark:hover:bg-white/[0.03]">Annuler</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <div class="mt-6 text-center">
         <a href="/" class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30 dark:hover:text-dbs-purple">← Retour au site</a>
       </div>
@@ -360,7 +433,7 @@ if (Astro.request.method === 'POST') {
   </div>
 </BaseLayout>
 
-<script>
+<script is:inline>
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => {
     b.classList.remove('active', 'text-dbs-purple', 'border-dbs-purple');
@@ -371,6 +444,142 @@ function switchTab(name) {
 
   document.getElementById('panel-create').style.display = name === 'create' ? '' : 'none';
   document.getElementById('panel-email').style.display = name === 'email' ? '' : 'none';
+  document.getElementById('panel-promo').style.display = name === 'promo' ? '' : 'none';
+  if (name === 'promo') refreshPromoCodes();
+}
+
+/* ── Promo Codes Management ── */
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+
+function showPromoMsg(type, text) {
+  const el = document.getElementById('promo-message');
+  el.className = 'rounded-xl px-5 py-3 text-sm font-medium ' + (type === 'success'
+    ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+    : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400');
+  el.textContent = text;
+  el.classList.remove('hidden');
+}
+
+async function refreshPromoCodes() {
+  const container = document.getElementById('promo-table-container');
+  container.innerHTML = '<p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Chargement…</p>';
+  try {
+    const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    if (!data.codes || data.codes.length === 0) {
+      container.innerHTML = '<p class="py-8 text-center text-sm text-dbs-dark/30 dark:text-white/20">Aucun code promo pour le moment.</p>';
+      return;
+    }
+    let html = '<div class="overflow-x-auto rounded-xl border border-black/[0.06] dark:border-white/[0.06]">';
+    html += '<table class="w-full text-left text-sm">';
+    html += '<thead><tr class="border-b border-black/[0.06] dark:border-white/[0.06] text-[11px] font-semibold uppercase tracking-[0.1em] text-dbs-dark/40 dark:text-white/30">';
+    html += '<th class="px-4 py-3">Code</th><th class="px-4 py-3">Réduction</th><th class="px-4 py-3">Min</th><th class="px-4 py-3">Utilisations</th><th class="px-4 py-3">État</th><th class="px-4 py-3">Actions</th>';
+    html += '</tr></thead><tbody>';
+    for (const c of data.codes) {
+      const discountStr = c.discountType === 'percentage' ? `-${c.discountValue}%` : `-${(c.discountValue/100).toFixed(2)}€`;
+      const usesStr = c.maxUses > 0 ? `${c.usedCount}/${c.maxUses}` : `${c.usedCount}/∞`;
+      let statusStr = '';
+      let statusClass = '';
+      if (!c.active) { statusStr = 'Désactivé'; statusClass = 'text-red-500'; }
+      else if (c.expiresAt && new Date(c.expiresAt) < new Date()) { statusStr = 'Expiré'; statusClass = 'text-orange-500'; }
+      else { statusStr = 'Actif'; statusClass = 'text-green-600'; }
+      html += `<tr class="border-b border-black/[0.03] dark:border-white/[0.03] hover:bg-black/[0.01] dark:hover:bg-white/[0.02]">`;
+      html += `<td class="px-4 py-3 font-mono text-xs font-bold text-dbs-dark dark:text-white/80">${c.code}</td>`;
+      html += `<td class="px-4 py-3"><span class="rounded-full bg-dbs-purple/[0.08] px-2.5 py-0.5 text-xs font-semibold text-dbs-purple">${c.label || discountStr}</span></td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${c.minQuantity}</td>`;
+      html += `<td class="px-4 py-3 text-xs text-dbs-dark/50 dark:text-white/30">${usesStr}</td>`;
+      html += `<td class="px-4 py-3"><span class="text-xs font-semibold ${statusClass}">● ${statusStr}</span></td>`;
+      html += `<td class="px-4 py-3"><div class="flex gap-2">`;
+      html += `<button onclick='editPromoCode(${JSON.stringify(c).replace(/'/g, "\\'")})' class="text-xs text-dbs-purple underline transition hover:text-dbs-purple/70">Modifier</button>`;
+      html += `<button onclick='togglePromoActive("${c.code}", ${!c.active})' class="text-xs text-dbs-dark/40 underline transition hover:text-dbs-purple dark:text-white/30">${c.active ? 'Désactiver' : 'Activer'}</button>`;
+      html += `</div></td>`;
+      html += `</tr>`;
+    }
+    html += '</tbody></table></div>';
+    container.innerHTML = html;
+  } catch (err) {
+    container.innerHTML = '<p class="py-8 text-center text-sm text-red-500">Erreur de chargement : ' + err.message + '</p>';
+  }
+}
+
+async function savePromoCode(e) {
+  e.preventDefault();
+  const code = document.getElementById('promo-code').value.trim().toUpperCase();
+  if (!code) { showPromoMsg('error', 'Le code est requis.'); return; }
+
+  const payload = {
+    code,
+    discountType: document.getElementById('promo-discount-type').value,
+    discountValue: parseInt(document.getElementById('promo-discount-value').value, 10) || 0,
+    label: document.getElementById('promo-label').value.trim() || undefined,
+    minQuantity: parseInt(document.getElementById('promo-min-qty').value, 10) || 1,
+    maxUses: parseInt(document.getElementById('promo-max-uses').value, 10) || 0,
+    expiresAt: document.getElementById('promo-expires').value || undefined,
+    active: document.getElementById('promo-active').checked,
+  };
+
+  try {
+    const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showPromoMsg('success', '✅ Code ' + code + ' enregistré !');
+      resetPromoForm();
+      refreshPromoCodes();
+    } else {
+      showPromoMsg('error', '❌ ' + (data.error || 'Erreur inconnue'));
+    }
+  } catch (err) {
+    showPromoMsg('error', '❌ Erreur réseau : ' + err.message);
+  }
+}
+
+function editPromoCode(c) {
+  document.getElementById('edit-original-code').value = c.code;
+  document.getElementById('promo-code').value = c.code;
+  document.getElementById('promo-discount-type').value = c.discountType;
+  document.getElementById('promo-discount-value').value = c.discountValue;
+  document.getElementById('promo-label').value = c.label || '';
+  document.getElementById('promo-min-qty').value = c.minQuantity;
+  document.getElementById('promo-max-uses').value = c.maxUses;
+  document.getElementById('promo-expires').value = c.expiresAt ? c.expiresAt.split('T')[0] : '';
+  document.getElementById('promo-active').checked = c.active;
+  document.getElementById('promo-code').focus();
+  document.getElementById('promo-code').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function resetPromoForm() {
+  document.getElementById('edit-original-code').value = '';
+  document.getElementById('promo-form').reset();
+  document.getElementById('promo-active').checked = true;
+  document.getElementById('promo-label').value = '';
+  document.getElementById('promo-expires').value = '';
+}
+
+async function togglePromoActive(code, newActive) {
+  if (newActive) {
+    // Reactivate: fetch current data first to preserve all fields
+    const res = await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN));
+    const data = await res.json();
+    const found = data.codes?.find(c => c.code === code);
+    if (found) {
+      found.active = true;
+      await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(found),
+      });
+    }
+  } else {
+    await fetch('/api/admin/promocodes?token=' + encodeURIComponent(TOKEN) + '&code=' + encodeURIComponent(code), {
+      method: 'DELETE',
+    });
+  }
+  showPromoMsg('success', newActive ? '✅ Code ' + code + ' réactivé !' : '⏸️ Code ' + code + ' désactivé.');
+  refreshPromoCodes();
 }
 </script>
 

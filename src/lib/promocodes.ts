@@ -1,9 +1,10 @@
 /**
  * Promo codes — stored in PostgreSQL.
  * Seed codes (TEST99, WELCOME10) are always present, usage counts are live in DB.
+ * Falls back gracefully when DB is unavailable.
  */
 
-import { getDb } from './db';
+import { getDb, withDb } from './db';
 
 export interface PromoCode {
   code: string;
@@ -57,23 +58,29 @@ function rowToPromo(row: any): PromoCode {
 
 /** Ensure seed codes exist in the DB (no-op if already there) */
 async function ensureSeeds(): Promise<void> {
-  const db = await getDb();
-  for (const s of SEED_CODES) {
-    await db.query(
-      `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
-       VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$8)
-       ON CONFLICT (code) DO NOTHING`,
-      [s.code, s.discountType, s.discountValue, s.minQuantity, s.maxUses, s.usedCount, s.active, s.label],
-    );
-  }
+  await withDb(async db => {
+    for (const s of SEED_CODES) {
+      await db.query(
+        `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
+         VALUES ($1,$2,$3,$4,$5,$6,NULL,$7,$8)
+         ON CONFLICT (code) DO NOTHING`,
+        [s.code, s.discountType, s.discountValue, s.minQuantity, s.maxUses, s.usedCount, s.active, s.label],
+      );
+    }
+  }, undefined);
 }
 
-/** List all promo codes */
+/** List all promo codes — falls back to seed codes if DB unavailable */
 export async function listCodes(): Promise<PromoCode[]> {
   await ensureSeeds();
   const db = await getDb();
-  const res = await db.query('SELECT * FROM promocodes ORDER BY code');
-  return res.rows.map(rowToPromo);
+  if (!db) return [...SEED_CODES];
+  try {
+    const res = await db.query('SELECT * FROM promocodes ORDER BY code');
+    return res.rows.map(rowToPromo);
+  } catch {
+    return [...SEED_CODES];
+  }
 }
 
 /** Validate a promo code and return its details (or null if invalid) */
@@ -126,38 +133,29 @@ export function applyDiscount(
 
 /** Increment usage count for a promo code */
 export async function markUsed(code: string): Promise<void> {
-  const db = await getDb();
-  await db.query(
-    'UPDATE promocodes SET used_count = used_count + 1 WHERE code = $1',
-    [code.toUpperCase().trim()],
+  await withDb(
+    db => db.query('UPDATE promocodes SET used_count = used_count + 1 WHERE code = $1', [code.toUpperCase().trim()]),
+    undefined,
   );
 }
 
 /** Persist a promo code (insert or update) */
 export async function saveCode(promo: PromoCode): Promise<void> {
-  const db = await getDb();
-  await db.query(
-    `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-     ON CONFLICT (code) DO UPDATE SET
-       discount_type = EXCLUDED.discount_type,
-       discount_value = EXCLUDED.discount_value,
-       min_quantity = EXCLUDED.min_quantity,
-       max_uses = EXCLUDED.max_uses,
-       used_count = EXCLUDED.used_count,
-       expires_at = EXCLUDED.expires_at,
-       active = EXCLUDED.active,
-       label = EXCLUDED.label`,
-    [
-      promo.code,
-      promo.discountType,
-      promo.discountValue,
-      promo.minQuantity,
-      promo.maxUses,
-      promo.usedCount,
-      promo.expiresAt || null,
-      promo.active,
-      promo.label || '',
-    ],
+  await withDb(
+    db => db.query(
+      `INSERT INTO promocodes (code, discount_type, discount_value, min_quantity, max_uses, used_count, expires_at, active, label)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (code) DO UPDATE SET
+         discount_type = EXCLUDED.discount_type,
+         discount_value = EXCLUDED.discount_value,
+         min_quantity = EXCLUDED.min_quantity,
+         max_uses = EXCLUDED.max_uses,
+         used_count = EXCLUDED.used_count,
+         expires_at = EXCLUDED.expires_at,
+         active = EXCLUDED.active,
+         label = EXCLUDED.label`,
+      [promo.code, promo.discountType, promo.discountValue, promo.minQuantity, promo.maxUses, promo.usedCount, promo.expiresAt || null, promo.active, promo.label || ''],
+    ),
+    undefined,
   );
 }

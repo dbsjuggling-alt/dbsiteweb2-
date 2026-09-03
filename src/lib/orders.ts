@@ -1,9 +1,10 @@
 /**
  * Order storage — PostgreSQL.
  * Stores order info (email, name, quantity) indexed by Stripe session ID.
+ * Falls back gracefully when DB is unavailable (Railway deploy cycles).
  */
 
-import { getDb } from './db';
+import { getDb, withDb } from './db';
 
 export interface OrderRecord {
   stripeSessionId: string;
@@ -41,54 +42,57 @@ function rowToOrder(row: any): OrderRecord {
 
 /** Save a new order after Stripe payment (idempotent on session id) */
 export async function saveOrder(record: OrderRecord): Promise<void> {
-  const db = await getDb();
-  await db.query(
-    `INSERT INTO orders (stripe_session_id, customer_email, customer_name, quantity, total,
-       shipping_address, city, postal_code, country, carrier, tracking_number, status, created_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (stripe_session_id) DO UPDATE SET
-       customer_email = EXCLUDED.customer_email,
-       customer_name = EXCLUDED.customer_name,
-       quantity = EXCLUDED.quantity,
-       total = EXCLUDED.total,
-       shipping_address = EXCLUDED.shipping_address,
-       city = EXCLUDED.city,
-       postal_code = EXCLUDED.postal_code,
-       country = EXCLUDED.country,
-       carrier = EXCLUDED.carrier,
-       tracking_number = EXCLUDED.tracking_number,
-       status = EXCLUDED.status`,
-    [
-      record.stripeSessionId,
-      record.customerEmail,
-      record.customerName,
-      record.quantity,
-      record.total,
-      record.shippingAddress,
-      record.city,
-      record.postalCode,
-      record.country,
-      record.carrier || null,
-      record.trackingNumber || null,
-      record.status,
-      record.createdAt || new Date().toISOString(),
-    ],
+  await withDb(
+    db => db.query(
+      `INSERT INTO orders (stripe_session_id, customer_email, customer_name, quantity, total,
+         shipping_address, city, postal_code, country, carrier, tracking_number, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (stripe_session_id) DO UPDATE SET
+         customer_email = EXCLUDED.customer_email,
+         customer_name = EXCLUDED.customer_name,
+         quantity = EXCLUDED.quantity,
+         total = EXCLUDED.total,
+         shipping_address = EXCLUDED.shipping_address,
+         city = EXCLUDED.city,
+         postal_code = EXCLUDED.postal_code,
+         country = EXCLUDED.country,
+         carrier = EXCLUDED.carrier,
+         tracking_number = EXCLUDED.tracking_number,
+         status = EXCLUDED.status`,
+      [
+        record.stripeSessionId, record.customerEmail, record.customerName,
+        record.quantity, record.total, record.shippingAddress,
+        record.city, record.postalCode, record.country,
+        record.carrier || null, record.trackingNumber || null,
+        record.status, record.createdAt || new Date().toISOString(),
+      ],
+    ),
+    undefined,
   );
 }
 
 /** Find an order by its Stripe session ID */
 export async function findOrder(sessionId: string): Promise<OrderRecord | null> {
   const db = await getDb();
-  const res = await db.query('SELECT * FROM orders WHERE stripe_session_id = $1', [sessionId]);
-  if (res.rows.length === 0) return null;
-  return rowToOrder(res.rows[0]);
+  if (!db) return null;
+  try {
+    const res = await db.query('SELECT * FROM orders WHERE stripe_session_id = $1', [sessionId]);
+    return res.rows.length > 0 ? rowToOrder(res.rows[0]) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** List all orders, most recent first */
 export async function listOrders(): Promise<OrderRecord[]> {
   const db = await getDb();
-  const res = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
-  return res.rows.map(rowToOrder);
+  if (!db) return [];
+  try {
+    const res = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
+    return res.rows.map(rowToOrder);
+  } catch {
+    return [];
+  }
 }
 
 /** Mark an order as shipped with tracking info */
@@ -98,11 +102,15 @@ export async function markShipped(
   carrier: string,
 ): Promise<OrderRecord | null> {
   const db = await getDb();
-  const res = await db.query(
-    `UPDATE orders SET status = 'shipped', tracking_number = $2, carrier = $3
-     WHERE stripe_session_id = $1 RETURNING *`,
-    [sessionId, trackingNumber, carrier],
-  );
-  if (res.rows.length === 0) return null;
-  return rowToOrder(res.rows[0]);
+  if (!db) return null;
+  try {
+    const res = await db.query(
+      `UPDATE orders SET status = 'shipped', tracking_number = $2, carrier = $3
+       WHERE stripe_session_id = $1 RETURNING *`,
+      [sessionId, trackingNumber, carrier],
+    );
+    return res.rows.length > 0 ? rowToOrder(res.rows[0]) : null;
+  } catch {
+    return null;
+  }
 }

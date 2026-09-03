@@ -8,20 +8,7 @@ import pg from 'pg';
 
 const { Pool } = pg;
 
-let poolPromise: Promise<pg.Pool> | null = null;
-
-function buildPool(): pg.Pool {
-  const url = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || '';
-  const isRailway = url.includes('railway') || url.includes('up.railway.app');
-  return new Pool({
-    connectionString: url,
-    // Railway Postgres requires SSL (self-signed) — rejectUnauthorized: false
-    ssl: url && isRailway ? { rejectUnauthorized: false } : undefined,
-    max: 10,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
-}
+let poolPromise: Promise<pg.Pool | null> | null = null;
 
 const INIT_SQL = `
 CREATE TABLE IF NOT EXISTS orders (
@@ -72,21 +59,45 @@ CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_email_log_created_at ON email_log (created_at DESC);
 `;
 
-/** Get the pool, creating tables on first use. */
-export async function getDb(): Promise<pg.Pool> {
+/** Get the pool, creating tables on first use. Returns null if unavailable (never throws). */
+export async function getDb(): Promise<pg.Pool | null> {
+  const url = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || '';
+  if (!url) return null;
+
   if (!poolPromise) {
     poolPromise = (async () => {
-      const pool = buildPool();
+      const isRailway = url.includes('railway') || url.includes('up.railway.app');
+      const pool = new Pool({
+        connectionString: url,
+        ssl: isRailway ? { rejectUnauthorized: false } : undefined,
+        max: 5,
+        idleTimeoutMillis: 5000,
+        connectionTimeoutMillis: 8000,
+      });
       try {
+        await pool.query('SELECT 1');
         await pool.query(INIT_SQL);
       } catch (err: any) {
-        // If init fails (e.g. no DATABASE_URL), surface clearly
-        console.error('[db] Could not initialize database:', err.message);
+        console.error('[db] Init failed:', err.message);
+        pool.end().catch(() => {});
+        poolPromise = null; // Allow retry on next call
+        return null;
       }
       return pool;
     })();
   }
   return poolPromise;
+}
+
+/** Helper: run a callback with the DB, falls back to fallback value if DB unavailable. */
+export async function withDb<T>(fn: (db: pg.Pool) => Promise<T>, fallback: T): Promise<T> {
+  try {
+    const db = await getDb();
+    if (!db) return fallback;
+    return await fn(db);
+  } catch {
+    return fallback;
+  }
 }
 
 /** Quick check — used by admin diagnostics. Returns true when reachable. */

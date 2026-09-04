@@ -74,7 +74,7 @@ const lang = defaultLocale;
       </div>
 
       <div class="mt-6 rounded-2xl border border-black/[0.04] bg-dbs-purple/[0.015] p-6 text-center anim-fade-up dark:border-white/[0.05] dark:bg-dbs-purple/[0.04]">
-        <p class="text-sm font-medium text-dbs-dark/60 dark:text-white/50"><strong class="text-dbs-dark dark:text-white/80">{translate(lang, 'store.shipping.text')}</strong></p>
+        <p class="text-sm font-medium text-dbs-dark/60 dark:text-white/50"><strong class="text-dbs-dark dark:text-white/80" data-shipping>{translate(lang, 'store.shipping.text')}</strong></p>
         <p class="mt-2 text-xs text-dbs-dark/35 dark:text-white/25">{translate(lang, 'store.shipping.countries')}</p>
         <p class="mt-1 text-xs text-dbs-dark/35 dark:text-white/25">
           {translate(lang, 'store.shipping.other')}
@@ -113,6 +113,11 @@ fetch('/api/settings').then(r => r.json()).then(data => {
     document.getElementById('qty-input').max = storeSettings.maxQuantity;
     document.getElementById('unit-price').textContent = '\u20AC' + ((storeSettings.unitPriceCents / 100).toFixed(2));
     updateDisplay();
+    // Update shipping display
+    const shippingEl = document.querySelector('[data-shipping]');
+    if (shippingEl) {
+      shippingEl.textContent = '\u20AC' + ((storeSettings.shippingCents / 100).toFixed(2)) + ' shipping flat rate per order. Fast delivery with tracking number.';
+    }
   }
 }).catch(() => {});
 

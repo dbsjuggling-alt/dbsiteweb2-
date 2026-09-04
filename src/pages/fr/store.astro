@@ -74,7 +74,7 @@ const lang = 'fr';
       </div>
 
       <div class="mt-6 rounded-2xl border border-black/[0.04] bg-dbs-purple/[0.015] p-6 text-center anim-fade-up dark:border-white/[0.05] dark:bg-dbs-purple/[0.04]">
-        <p class="text-sm font-medium text-dbs-dark/60 dark:text-white/50"><strong class="text-dbs-dark dark:text-white/80">{translate(lang, 'store.shipping.text')}</strong></p>
+        <p class="text-sm font-medium text-dbs-dark/60 dark:text-white/50"><strong class="text-dbs-dark dark:text-white/80" data-shipping>{translate(lang, 'store.shipping.text')}</strong></p>
         <p class="mt-2 text-xs text-dbs-dark/35 dark:text-white/25">{translate(lang, 'store.shipping.countries')}</p>
         <p class="mt-1 text-xs text-dbs-dark/35 dark:text-white/25">
           {translate(lang, 'store.shipping.other')}
@@ -103,13 +103,31 @@ const savedAmount = document.getElementById('saved-amount');
 let promoApplied = false;
 let currentCode = '';
 
-function getUnitPrice(qty) { return 500; }
+// Store settings (fetched from server)
+let storeSettings = { unitPriceCents: 500, maxQuantity: 50 };
+
+// Fetch settings on load
+fetch('/api/settings').then(r => r.json()).then(data => {
+  if (data.settings) {
+    storeSettings = data.settings;
+    document.getElementById('qty-input').max = storeSettings.maxQuantity;
+    document.getElementById('unit-price').textContent = '\u20AC' + ((storeSettings.unitPriceCents / 100).toFixed(2));
+    updateDisplay();
+    // Update shipping display
+    const shippingEl = document.querySelector('[data-shipping]');
+    if (shippingEl) {
+      shippingEl.textContent = '\u20AC' + ((storeSettings.shippingCents / 100).toFixed(2)) + ' de frais de port par commande. Livraison rapide avec suivi.';
+    }
+  }
+}).catch(() => {});
+
+function getUnitPrice(qty) { return storeSettings.unitPriceCents; }
 function getTotal(qty) { return getUnitPrice(qty) * qty; }
 function formatEur(cents) { return '\u20AC' + (cents / 100).toFixed(2); }
 
 function updateDisplay() {
   const qty = parseInt(qtyInput.value, 10) || 1;
-  const clamped = Math.max(1, Math.min(50, qty));
+  const clamped = Math.max(1, Math.min(storeSettings.maxQuantity, qty));
   qtyInput.value = clamped;
   unitEl.textContent = formatEur(getUnitPrice(clamped));
   
@@ -124,7 +142,7 @@ function updateDisplay() {
 }
 
 qtyMinus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) > 1) qtyInput.value--; updateDisplay(); });
-qtyPlus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) < 50) qtyInput.value++; updateDisplay(); });
+qtyPlus.addEventListener('click', () => { if ((parseInt(qtyInput.value,10)||1) < storeSettings.maxQuantity) qtyInput.value++; updateDisplay(); });
 qtyInput.addEventListener('change', updateDisplay);
 qtyInput.addEventListener('input', updateDisplay);
 
@@ -133,7 +151,7 @@ checkoutBtn.addEventListener('click', async () => {
   checkoutBtn.disabled = true;
   checkoutBtn.textContent = 'Chargement...';
   try {
-    const body = { quantity: qty, unitAmount: 500 };
+    const body = { quantity: qty, unitAmount: storeSettings.unitPriceCents };
     if (promoApplied && currentCode) body.promoCode = currentCode;
     const res = await fetch('/api/checkout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
     const data = await res.json();
